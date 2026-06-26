@@ -189,7 +189,19 @@ export function useTasks(userId: string | null, options: UseTasksOptions = {}) {
         surface("Couldn't save the task. Check your connection and try again.");
         return null;
       }
-      return (data ?? null) as Task | null;
+      const row = (data ?? null) as Task | null;
+      // Optimistic local insert — drop the row into both the canonical
+      // array and the live mirror immediately so the calendar (and any
+      // other consumer) renders without waiting for the realtime
+      // echo. Realtime INSERT events are idempotent against this entry
+      // via the `prev.some(...)` dedup at the postgres_changes
+      // handler. Doing this in both arrays keeps the matrix and
+      // calendar in sync even if realtime briefly lags.
+      if (row) {
+        setTasks((prev) => (prev.some((t) => t.id === row.id) ? prev : [row, ...prev]));
+        setLiveTasks((prev) => (prev.some((t) => t.id === row.id) ? prev : [row, ...prev]));
+      }
+      return row;
     },
     [userId, surface],
   );

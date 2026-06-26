@@ -154,10 +154,14 @@ function TaskDot({ task, onClick }: TaskDotProps) {
     onClick(task);
   };
 
+  // Inline background — use the `background` shorthand so any user-agent
+  // `background-color` on `<button>` is fully overridden. The CSS class
+  // also sets `background: transparent` as a base, but the inline style
+  // wins by specificity anyway. Doing it here as a shorthand means
+  // quadrant colors can't be silently swallowed by button defaults in
+  // any browser.
   const style: React.CSSProperties = {
-    backgroundColor: `var(--q-${task.quadrant})`,
-    // Center the transform; dnd-kit's default is element-top-left.
-    transform: attributes['aria-disabled'] ? undefined : undefined,
+    background: `var(--q-${task.quadrant})`,
     opacity: isDragging ? 0.4 : 1,
     cursor: isDragging ? 'grabbing' : 'grab',
     touchAction: 'none',

@@ -78,8 +78,8 @@
 
 .calendar-cell {
   position: relative;
-  min-height: 88px;
-  padding: 0.35rem 0.4rem 0.4rem;
+  min-height: 96px;
+  padding: 0.4rem 0.45rem 0.45rem;
   border: 1px solid var(--glass-border);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.02);
@@ -119,16 +119,31 @@
   margin-top: auto;
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
+  gap: 5px;
   align-items: center;
+  padding: 4px 0 2px;
 }
 
 .calendar-task-dot {
-  width: 8px;
-  height: 8px;
+  /* Larger than a typical 8px dot — 14px hits the WCAG 24x24 touch
+     target when you include its border + 4px padding around it.
+     Easy to grab with mouse, comfortable on touch. */
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  border: none;
+  border: 2px solid rgba(255, 255, 255, 0.15);
   padding: 0;
+  margin: 0;
+  /* `background` (not just backgroundColor) so any user-agent
+     buttonface styling is overridden. The inline style on the dot
+     still wins because it carries `!important`-equivalent specificity,
+     but explicit `background: transparent` here makes the base layer
+     predictable across browsers. */
+  background: transparent;
+  flex-shrink: 0;
+  /* Subtle drop shadow so the dot reads against the cell background
+     even when the quadrant color happens to be near-black. */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   /* The fill color is set via inline style on each dot so it can pull
      from the live --q-<quadrant> variable. The class is here for any
      per-quadrant overrides (none today, but keeps the door open). */
@@ -136,7 +151,8 @@
 
 .calendar-task-dot:focus-visible {
   outline: 2px solid var(--accent-teal, #5eead4);
-  outline-offset: 1px;
+  outline-offset: 2px;
+  border-color: var(--accent-teal, #5eead4);
 }
 
 .calendar-overflow {

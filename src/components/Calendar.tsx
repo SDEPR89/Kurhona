@@ -158,14 +158,13 @@ function TaskDot({ task, onClick }: TaskDotProps) {
     onClick(task);
   };
 
-  // Inline background — use the `background` shorthand so any user-agent
-  // `background-color` on `<button>` is fully overridden. The CSS class
-  // also sets `background: transparent` as a base, but the inline style
-  // wins by specificity anyway. Doing it here as a shorthand means
-  // quadrant colors can't be silently swallowed by button defaults in
-  // any browser.
+  // The dot's background-color is set via the per-quadrant modifier
+  // classes (.calendar-task-dot--do-first etc.) in Calendar.css —
+  // using CSS classes avoids a class of issues where the minifier
+  // would otherwise rewrite the inline style in ways that lose the
+  // var() reference. We still need to control opacity for the
+  // drag-feedback and pass through dnd-kit's transform style.
   const style: React.CSSProperties = {
-    background: `var(--q-${task.quadrant})`,
     opacity: isDragging ? 0.4 : 1,
     cursor: isDragging ? 'grabbing' : 'grab',
     touchAction: 'none',

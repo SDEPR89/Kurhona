@@ -142,17 +142,27 @@
   border: 2px solid rgba(255, 255, 255, 0.2);
   padding: 0;
   margin: 0;
-  /* `background` (not just backgroundColor) so any user-agent
-     buttonface styling is overridden. The inline style on the dot
-     still wins by specificity, but explicit `background: transparent`
-     here makes the base layer predictable across browsers. */
-  background: transparent;
   flex-shrink: 0;
   /* Drop shadow so the dot reads against the cell background even
      when the quadrant color is dark. */
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
   transition: transform 0.12s ease, box-shadow 0.12s ease;
+  /* Use background-color (not `background` shorthand) so the CSS
+     minifier can't rewrite this to `background: 0 0` which would
+     reset color to initial (transparent) and visually "delete" the
+     dot's fill. Per-quadrant fills come from the modifier classes
+     below. */
+  background-color: transparent;
 }
+
+/* Per-quadrant fills — set via CSS classes (not inline var()) so
+   the minifier can't interfere. The CSS variable still wins for
+   theme support (light/dark swap re-resolves it). The hex fallback
+   keeps the dot visible even if the variable is undefined. */
+.calendar-task-dot--do-first  { background-color: var(--q-do-first,  #ef4444); }
+.calendar-task-dot--schedule  { background-color: var(--q-schedule,  #3b82f6); }
+.calendar-task-dot--delegate  { background-color: var(--q-delegate,  #f59e0b); }
+.calendar-task-dot--eliminate { background-color: var(--q-eliminate, #6b7280); }
 
 .calendar-task-dot:hover,
 .calendar-task-dot:focus-visible {
@@ -163,6 +173,7 @@
 .calendar-task-dot:focus-visible {
   outline: 2px solid var(--accent-teal, #5eead4);
   outline-offset: 2px;
+  border-color: var(--accent-teal, #5eead4);
 }
 
 /* Hover tooltip — shows the task title (and quadrant) in a styled

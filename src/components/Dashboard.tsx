@@ -7,6 +7,7 @@ import { Quadrant } from './Quadrant';
 import { TaskCard } from './TaskCard';
 import { TaskModal } from './TaskModal';
 import { SettingsModal } from './SettingsModal';
+import { Calendar } from './Calendar';
 import { useConfirm } from '../hooks/useConfirm';
 import { useToast } from '../hooks/useToast';
 import { QUADRANTS } from '../types';
@@ -26,6 +27,12 @@ import {
 } from '@dnd-kit/core';
 import type { DragStartEvent, DragEndEvent, DragOverEvent, DragCancelEvent } from '@dnd-kit/core';
 import './Dashboard.css';
+import {
+  CALENDAR_TASK_ID_PREFIX,
+  CALENDAR_DAY_ID_PREFIX,
+  decodeCalendarTaskId,
+  decodeCalendarDayId,
+} from './Calendar';
 
 type View = 'active' | 'done';
 
@@ -83,6 +90,7 @@ export function Dashboard({
     error,
     createTask,
     updateTask,
+    setDueDate,
     completeTask,
     uncompleteTask,
     deleteTask,
@@ -97,7 +105,7 @@ export function Dashboard({
 
   const [view, setView] = useState<View>('active');
   const [editing, setEditing] = useState<
-    | { kind: 'create'; quadrant: QuadrantId }
+    | { kind: 'create'; quadrant: QuadrantId; dueDate?: string }
     | { kind: 'edit'; task: Task }
     | null
   >(null);
@@ -224,6 +232,15 @@ export function Dashboard({
 
   function handleDragStart(e: DragStartEvent) {
     const activeId = String(e.active.id);
+    // Calendar drags (id prefix `task:`) bypass the matrix's live-
+    // mirror machinery entirely — the calendar renders the dragging
+    // dot's own opacity, and onDragEnd routes the drop to setDueDate.
+    if (activeId.startsWith(CALENDAR_TASK_ID_PREFIX)) {
+      setActiveDragId(activeId);
+      lastOverIdRef.current = null;
+      dragSourceQuadrantRef.current = null;
+      return;
+    }
     setActiveDragId(activeId);
     snapshotLiveTasks();
     lastOverIdRef.current = activeId;
@@ -247,6 +264,17 @@ export function Dashboard({
 
     const activeId = String(active.id);
     const overId = String(over.id);
+
+    // Calendar drags don't need the matrix's re-bucket logic — the
+    // dot is already opaque-on-grab and we only care about the final
+    // day drop. Skip here so we don't accidentally re-bucket a matrix
+    // task that happens to share an id prefix pattern (none today,
+    // but defensive).
+    if (activeId.startsWith(CALENDAR_TASK_ID_PREFIX)) {
+      lastOverIdRef.current = overId.startsWith(CALENDAR_DAY_ID_PREFIX) ? overId : null;
+      return;
+    }
+
     if (activeId === overId) return;
 
     const activeContainer = findLiveContainer(activeId);
@@ -340,7 +368,26 @@ export function Dashboard({
     setActiveDragId(null);
     lastOverIdRef.current = null;
     recentlyMovedToNewContainerRef.current = false;
+    const activeId = String(e.active.id);
     const overId = e.over ? String(e.over.id) : null;
+
+    // Calendar reschedule path. The dragged dot's id is prefixed
+    // `task:` and the day's droppable id is prefixed `day:` (both
+    // exported from Calendar.tsx). On a successful drop we update
+    // `due_date` for the task via the hook's setDueDate helper — a
+    // single updateTask call, so no live-mirror snapshot/rollback is
+    // needed; the realtime channel will eventually replace our state
+    // with the server's truth regardless of success/failure.
+    if (activeId.startsWith(CALENDAR_TASK_ID_PREFIX)) {
+      dragSourceQuadrantRef.current = null;
+      if (!overId || !overId.startsWith(CALENDAR_DAY_ID_PREFIX)) return;
+      const taskId = decodeCalendarTaskId(activeId);
+      const newDate = decodeCalendarDayId(overId);
+      const ok = await setDueDate(taskId, newDate);
+      if (!ok) toast.showError("Couldn't reschedule the task. Try again.");
+      return;
+    }
+
     if (!overId) {
       // No drop target — cancel by restoring the snapshot. Use
       // restoreLiveTasks (it also clears the snapshot ref so the
@@ -349,7 +396,7 @@ export function Dashboard({
       restoreLiveTasks();
       return;
     }
-    const ok = await reorder(String(e.active.id), overId, dragSourceQuadrantRef.current ?? undefined);
+    const ok = await reorder(activeId, overId, dragSourceQuadrantRef.current ?? undefined);
     dragSourceQuadrantRef.current = null;
     // Whether the RPC succeeded or failed, the snapshot is consumed
     // — the hook either committed (snapshot is now stale) or rolled
@@ -365,11 +412,17 @@ export function Dashboard({
     }
   }
 
-  function handleDragCancel(_e: DragCancelEvent) {
+  function handleDragCancel(e: DragCancelEvent) {
+    const activeId = String(e.active.id);
     setActiveDragId(null);
     lastOverIdRef.current = null;
     recentlyMovedToNewContainerRef.current = false;
     dragSourceQuadrantRef.current = null;
+    // Calendar drags never took a snapshot, so there is nothing to
+    // restore. Bail before the restoreLiveTasks() call so we don't
+    // accidentally clobber the matrix mirror when the user cancels
+    // a calendar dot drag.
+    if (activeId.startsWith(CALENDAR_TASK_ID_PREFIX)) return;
     restoreLiveTasks();
   }
 
@@ -428,6 +481,14 @@ export function Dashboard({
 
   function handleAdd(quadrant: QuadrantId) {
     setEditing({ kind: 'create', quadrant });
+  }
+
+  // Click on a calendar cell → open the create modal with that day
+  // pre-filled. The TaskModal reads `initial.due_date` and seeds the
+  // form (no need to also default the quadrant — the user picked
+  // do_first on creation and can change it from the modal).
+  function handleAddOnDate(isoDate: string) {
+    setEditing({ kind: 'create', quadrant: 'do_first', dueDate: isoDate });
   }
 
   function handleEdit(task: Task) {
@@ -597,6 +658,11 @@ export function Dashboard({
                 />
               ))}
             </div>
+            <Calendar
+              tasks={tasks}
+              onTaskClick={handleEdit}
+              onAddOnDate={handleAddOnDate}
+            />
             <DragOverlay>
               {activeDragId ? (
                 <div className="drag-overlay">
@@ -658,7 +724,10 @@ export function Dashboard({
       {editing?.kind === 'create' && (
         <TaskModal
           mode="create"
-          initial={{ quadrant: editing.quadrant }}
+          initial={{
+            quadrant: editing.quadrant,
+            ...(editing.dueDate ? { due_date: editing.dueDate } : {}),
+          }}
           subjects={subjects}
           onCreateSubject={handleCreateSubject}
           onDeleteSubject={deleteSubject}

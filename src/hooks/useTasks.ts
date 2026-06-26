@@ -218,6 +218,14 @@ export function useTasks(userId: string | null, options: UseTasksOptions = {}) {
     [updateTask],
   );
 
+  // Calendar reschedule — moves a task to a new due date (or clears it
+  // when passed `null`). Same shape as setQuadrant so the calendar's
+  // drag-and-drop handler can treat both symmetrically.
+  const setDueDate = useCallback(
+    async (id: string, dueDate: string | null) => updateTask(id, { due_date: dueDate }),
+    [updateTask],
+  );
+
   const completeTask = useCallback(
     async (id: string) => {
       await runBusy(id, async () => {
@@ -428,6 +436,7 @@ export function useTasks(userId: string | null, options: UseTasksOptions = {}) {
     createTask,
     updateTask,
     setQuadrant,
+    setDueDate,
     completeTask,
     uncompleteTask,
     deleteTask,

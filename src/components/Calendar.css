@@ -1,0 +1,154 @@
+/* Calendar — month-grid view beneath the matrix on the Active dashboard.
+   Reuses existing CSS variables (--glass-bg, --glass-border, --q-*,
+   --text-*, --accent-teal) defined in Dashboard.css so theme + quadrant
+   colors stay in sync. Hidden at <=720px (mobile/tablet fold). */
+
+.calendar {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.calendar-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary, #fff);
+}
+
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.calendar-nav-btn {
+  min-width: 2.25rem;
+  height: 2.25rem;
+  padding: 0 0.5rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.calendar-nav-today {
+  font-size: 0.85rem;
+}
+
+.calendar-month-label {
+  min-width: 9rem;
+  text-align: center;
+  font-weight: 500;
+  color: var(--text-primary, #fff);
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.calendar-weekday {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-align: center;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.calendar-cell {
+  position: relative;
+  min-height: 88px;
+  padding: 0.35rem 0.4rem 0.4rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.calendar-cell:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.calendar-cell--out {
+  opacity: 0.35;
+}
+
+.calendar-cell--today {
+  border-color: var(--accent-teal, #5eead4);
+  box-shadow: 0 0 0 1px var(--accent-teal, #5eead4) inset;
+}
+
+.calendar-cell--over {
+  background: rgba(94, 234, 212, 0.12);
+  border-color: var(--accent-teal, #5eead4);
+}
+
+.calendar-cell-number {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary, #fff);
+  align-self: flex-start;
+}
+
+.calendar-cell-dots {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  align-items: center;
+}
+
+.calendar-task-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  /* The fill color is set via inline style on each dot so it can pull
+     from the live --q-<quadrant> variable. The class is here for any
+     per-quadrant overrides (none today, but keeps the door open). */
+}
+
+.calendar-task-dot:focus-visible {
+  outline: 2px solid var(--accent-teal, #5eead4);
+  outline-offset: 1px;
+}
+
+.calendar-overflow {
+  font-size: 0.7rem;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+  margin-left: 2px;
+}
+
+/* Mobile/tablet: hide entirely. The matrix keeps the viewport — the
+   calendar's 6-row grid makes the page too long on a phone. */
+@media (max-width: 720px) {
+  .calendar {
+    display: none;
+  }
+}

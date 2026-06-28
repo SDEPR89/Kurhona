@@ -19,6 +19,57 @@ const USERNAME_RE = /^[A-Za-z0-9_]{3,32}$/;
 // enumerate accounts.)
 const GENERIC_AUTH_ERROR = 'Username or password is incorrect.';
 
+// "Stay signed in" preference storage. A small key (not namespaced under
+// the Supabase prefix) so it never collides with auth tokens we may
+// need to delete on sign-out / session-only sign-in. The value is the
+// string "1" or "0"; localStorage only stores strings.
+const STAY_SIGNED_IN_KEY = 'acme:staySignedIn';
+
+// Supabase encodes its auth tokens in localStorage as
+// `sb-<project-ref>-auth-token` (and similar). We match this prefix/
+// suffix to wipe the auth tokens we just wrote when the user opts out
+// of "Stay signed in". The suffix `auth-token` matches what the SDK
+// writes today; the prefix `sb-` is the SDK convention. This is the
+// same pattern App.tsx uses for cross-tab sign-out detection.
+function clearSupabaseAuthTokensFromStorage() {
+  if (typeof window === 'undefined') return;
+  try {
+    for (let i = window.localStorage.length - 1; i >= 0; i--) {
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // localStorage can be unavailable (private mode, quota). Safe to
+    // ignore — the worst case is the session keeps its persistent
+    // form, which is the conservative default.
+  }
+}
+
+function readStaySignedInPreference(): boolean {
+  // Default to true (current behavior). Read from localStorage so the
+  // user's last choice feels remembered across visits — a small UX
+  // win that matches what every other "remember me" toggle does.
+  if (typeof window === 'undefined') return true;
+  try {
+    const v = window.localStorage.getItem(STAY_SIGNED_IN_KEY);
+    if (v === '0') return false;
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+function writeStaySignedInPreference(value: boolean) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(STAY_SIGNED_IN_KEY, value ? '1' : '0');
+  } catch {
+    // localStorage unavailable — silently ignore (matches useTheme.ts).
+  }
+}
+
 function looksLikeEmail(s: string) {
   return EMAIL_RE.test(s.trim());
 }
@@ -65,21 +116,38 @@ export function LoginPage() {
   // separate from `loading` so the email/password form stays enabled
   // (or not) according to its own rules.
   const [guestLoading, setGuestLoading] = useState(false);
+  // "Stay signed in" preference. Seeded from localStorage so the user's
+  // last choice feels remembered; default true preserves the current
+  // persistent-session behavior on first visit.
+  const [staySignedIn, setStaySignedIn] = useState<boolean>(() => readStaySignedInPreference());
 
   function clearAlerts() {
     setError(null);
     setMessage(null);
   }
 
+  // Reset to true on mode flip so a stale unchecked state doesn't
+  // carry across into signup (which has no checkbox and no cleanup
+  // path to worry about). The user's persistent preference is still
+  // remembered in localStorage for next sign-in.
   const toggleMode = () => {
     const next = mode === 'signin' ? 'signup' : 'signin';
     setMode(next);
+    setStaySignedIn(true);
+    writeStaySignedInPreference(true);
     clearAlerts();
   };
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     clearAlerts();
+    // Reset the preference back to "stay signed in" on every submit so
+    // an unchecked state doesn't silently carry across sign-in
+    // attempts (e.g. a wrong password followed by a correct one). The
+    // user's persistent preference lives in localStorage and will be
+    // re-read on the next page load.
+    setStaySignedIn(true);
+    writeStaySignedInPreference(true);
     if (password.length < 8) {
       setError('Password must be at least 8 characters.');
       return;
@@ -144,7 +212,17 @@ export function LoginPage() {
         email: resolved.email,
         password,
       });
-      if (signInErr) setError(GENERIC_AUTH_ERROR);
+      if (signInErr) {
+        setError(GENERIC_AUTH_ERROR);
+      } else if (!staySignedIn) {
+        // "Stay signed in" is off — make the session tab-scoped. The
+        // SDK has already fired SIGNED_IN and App.tsx has rendered the
+        // dashboard; the in-memory session keeps the tab alive. We
+        // clear the localStorage entry now so refresh, tab close, and
+        // new tabs all see no session. Done after sign-in succeeds so
+        // there's no race with the auth listener's SIGNED_IN handler.
+        clearSupabaseAuthTokensFromStorage();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unexpected error');
     } finally {
@@ -342,6 +420,27 @@ export function LoginPage() {
             </p>
           )}
 
+          {mode === 'signin' && (
+            // "Remember me" — when off, the session is cleared from
+            // localStorage on successful sign-in so refresh / tab close
+            // / new tabs all see no session. Defaulted on for the common
+            // case; the user's choice is remembered across visits via
+            // STAY_SIGNED_IN_KEY.
+            <label className="stay-signed-in">
+              <input
+                type="checkbox"
+                checked={staySignedIn}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setStaySignedIn(next);
+                  writeStaySignedInPreference(next);
+                }}
+                disabled={busy}
+              />
+              <span className="stay-signed-in-label">Stay signed in</span>
+            </label>
+          )}
+
           <button className="btn-primary" type="submit" disabled={busy} aria-busy={busy || undefined}>
             {loading && <span className="spinner" aria-hidden="true" />}
             <span>{loading ? (mode === 'signin' ? 'Signing in' : 'Creating account') : mode === 'signin' ? 'Sign in' : 'Create account'}</span>
@@ -375,6 +474,11 @@ export function LoginPage() {
                 className="inline-link"
                 onClick={() => {
                   setMode('signup');
+                  // Signup doesn't show the "Stay signed in" toggle; reset
+                  // to the safe default so the unchecked state from a
+                  // forgotten sign-in mode doesn't haunt us.
+                  setStaySignedIn(true);
+                  writeStaySignedInPreference(true);
                   clearAlerts();
                 }}
               >

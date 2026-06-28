@@ -273,7 +273,8 @@ form > .field:nth-of-type(1) { animation: rise-in .55s ease-out .50s both; }
 form > .field:nth-of-type(2) { animation: rise-in .55s ease-out .58s both; }
 form > .form-error,
 form > .form-success      { animation: rise-in .55s ease-out .66s both; }
-form > .btn-primary       { animation: rise-in .55s ease-out .74s both; }
+form > .stay-signed-in    { animation: rise-in .55s ease-out .70s both; }
+form > .btn-primary       { animation: rise-in .55s ease-out .78s both; }
 
 @keyframes rise-in {
   from { opacity: 0; transform: translateY(12px); }
@@ -364,6 +365,76 @@ form > .btn-primary       { animation: rise-in .55s ease-out .74s both; }
 }
 .forgot-link:disabled { cursor: not-allowed; }
 
+/* ---------- "Stay signed in" row ---------- */
+/* Sits as a full-width label so the native checkbox + visible label
+   form a single click target (better than checkbox / label siblings
+   floating apart). The checkbox itself is restyled with appearance:
+   none + a custom ::before to match the glass aesthetic in both
+   themes; the default browser checkbox doesn't pick up the dark
+   theme's translucent background. */
+.stay-signed-in {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  color: var(--login-fg-soft);
+  transition: color .15s, opacity .15s;
+}
+.stay-signed-in:has(input:disabled) { cursor: not-allowed; opacity: .6; }
+
+.stay-signed-in input[type='checkbox'] {
+  /* Hide the default control but keep it accessible — the <label>
+     still receives clicks and forwards them. */
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--login-input-border);
+  border-radius: 5px;
+  background: var(--login-input-bg);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  transition:
+    background .15s,
+    border-color .15s,
+    box-shadow .15s;
+  flex: 0 0 auto;
+}
+.stay-signed-in input[type='checkbox']:hover:not(:disabled) {
+  border-color: var(--login-input-focus);
+}
+.stay-signed-in input[type='checkbox']:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--login-input-glow);
+  border-color: var(--login-input-focus);
+}
+.stay-signed-in input[type='checkbox']:disabled { cursor: not-allowed; }
+/* The checkmark — drawn with the accent color so it reads against
+   both the dark glass and the lighter light-theme glass. */
+.stay-signed-in input[type='checkbox']:checked {
+  background: #1ba39c;
+  border-color: #1ba39c;
+}
+.stay-signed-in input[type='checkbox']:checked::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  /* SVG data URI keeps the CSS portable — no asset file needed. */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='3 8 7 12 13 4'/></svg>");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+.stay-signed-in-label {
+  /* Plain span — kept as a separate element so future styling (icon,
+     tooltip) can hang off it without touching the checkbox. */
+  line-height: 1;
+}
+
 .form-error,
 .form-success {
   font-size: 13px;
@@ -441,7 +512,8 @@ form > .btn-primary       { animation: rise-in .55s ease-out .74s both; }
   .login-bg,
   .login-card,
   .login-card > *,
-  .btn-primary { animation: none !important; }
+  .btn-primary,
+  .stay-signed-in { animation: none !important; }
   .login-card,
   .login-card > * { opacity: 1 !important; transform: none !important; }
 }

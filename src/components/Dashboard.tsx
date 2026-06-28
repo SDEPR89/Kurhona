@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTasks } from '../hooks/useTasks';
 import { useSubjects } from '../hooks/useSubjects';
 import { useTheme } from '../hooks/useTheme';
@@ -35,6 +35,7 @@ import {
 } from './Calendar';
 
 type View = 'active' | 'done';
+type MobileTab = 'matrix' | 'calendar';
 
 interface Props {
   userId: string;
@@ -111,6 +112,25 @@ export function Dashboard({
   >(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  // Mobile bottom-nav tab. Only meaningful while `isMobile` is true;
+  // on desktop the bottom nav is hidden and the matrix + calendar are
+  // stacked as they always have been. Default `matrix` so the first
+  // mobile paint shows what the user came back for.
+  const [mobileTab, setMobileTab] = useState<MobileTab>('matrix');
+  // Live viewport query — mirrors the CSS breakpoint at
+  // Dashboard.css:160 (`@media (max-width: 720px)`) so layout and
+  // render logic stay in lockstep. `null` until the first paint to
+  // avoid flashing the wrong view.
+  const isMobile = useMediaQuery('(max-width: 720px)');
+  // When the viewport grows past 720px, reset the mobile tab back to
+  // `matrix` so a user who rotated their phone / resized the browser
+  // doesn't come back to a "Calendar" view they can't reach from
+  // desktop. Avoids the need to render two views simultaneously on
+  // the desktop layout (which would mount two DnDContexts, fight
+  // over the calendar droppables, etc.).
+  useEffect(() => {
+    if (isMobile === false) setMobileTab('matrix');
+  }, [isMobile]);
   // Drag-and-drop state. `activeDragId` is the task id currently being
   // dragged (set on dragstart, cleared on dragend). We use it to
   // render a translucent clone in <DragOverlay>.
@@ -627,8 +647,29 @@ export function Dashboard({
         </div>
       )}
 
-      {view === 'active' ? (
-        <div className="dashboard-view" key="active">
+      {/* Three render branches:
+            1. Mobile + Calendar tab  → full-width <Calendar>, no DnD.
+            2. Mobile + Matrix tab    → <DndContext> + matrix only
+                                         (calendar lives in its own tab).
+            3. Desktop (or first paint before matchMedia resolves)
+                                      → original stacked layout
+                                         (matrix + calendar inside
+                                         one DndContext, no mobile
+                                         pane split). Mirror the
+                                         desktop branch's old behavior
+                                         even on a phone when isMobile
+                                         is still null so we don't
+                                         flash a different layout. */}
+      {isMobile === true && mobileTab === 'calendar' ? (
+        <div className="dashboard-view dashboard-pane dashboard-pane--calendar" key="cal">
+          <Calendar
+            tasks={tasks}
+            onTaskClick={handleEdit}
+            onAddOnDate={handleAddOnDate}
+          />
+        </div>
+      ) : view === 'active' ? (
+        <div className="dashboard-view dashboard-pane dashboard-pane--matrix" key="active">
           <DndContext
             sensors={sensors}
             collisionDetection={collisionDetection}
@@ -658,11 +699,19 @@ export function Dashboard({
                 />
               ))}
             </div>
-            <Calendar
-              tasks={tasks}
-              onTaskClick={handleEdit}
-              onAddOnDate={handleAddOnDate}
-            />
+            {/* Calendar is only rendered below the matrix on desktop.
+                On mobile it gets its own tab via the branch above.
+                `!== true` covers both `false` (desktop) and `null`
+                (first paint before matchMedia resolves) — keeps the
+                original behavior of always-mounting during SSR / cold
+                paint. */}
+            {isMobile !== true && (
+              <Calendar
+                tasks={tasks}
+                onTaskClick={handleEdit}
+                onAddOnDate={handleAddOnDate}
+              />
+            )}
             <DragOverlay>
               {activeDragId ? (
                 <div className="drag-overlay">
@@ -720,6 +769,56 @@ export function Dashboard({
           />
         </div>
       )}
+
+      {/* Bottom nav. Always mounted; CSS hides it on desktop. Three
+          entries — Matrix, Calendar, Settings. Settings opens the
+          existing modal rather than a separate route, matching how
+          the desktop header's gear icon works. We use `<button
+          type="button">` (not links) because the destination is
+          in-app state, not a URL. `aria-current="page"` on the active
+          tab announces the current section to screen readers. */}
+      <nav className="mobile-tabbar" aria-label="Dashboard sections">
+        <button
+          type="button"
+          className={`mobile-tab${mobileTab === 'matrix' ? ' is-active' : ''}`}
+          onClick={() => setMobileTab('matrix')}
+          aria-current={mobileTab === 'matrix' ? 'page' : undefined}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7" rx="1.2" />
+            <rect x="14" y="3" width="7" height="7" rx="1.2" />
+            <rect x="3" y="14" width="7" height="7" rx="1.2" />
+            <rect x="14" y="14" width="7" height="7" rx="1.2" />
+          </svg>
+          <span>Matrix</span>
+        </button>
+        <button
+          type="button"
+          className={`mobile-tab${mobileTab === 'calendar' ? ' is-active' : ''}`}
+          onClick={() => setMobileTab('calendar')}
+          aria-current={mobileTab === 'calendar' ? 'page' : undefined}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+          <span>Calendar</span>
+        </button>
+        <button
+          type="button"
+          className="mobile-tab mobile-tab--settings"
+          onClick={() => setSettingsOpen(true)}
+          aria-label="Open settings"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+          <span>Settings</span>
+        </button>
+      </nav>
 
       {editing?.kind === 'create' && (
         <TaskModal
@@ -791,6 +890,32 @@ function taskSort(a: Task, b: Task) {
     return 1; // b is sorted, a is null → b first
   }
   return b.created_at.localeCompare(a.created_at);
+}
+
+// Reactive media-query hook. Returns `null` during SSR / first paint
+// (when `window.matchMedia` isn't available), then the live boolean
+// afterward. Subscribes to changes so a user rotating their phone or
+// dragging the browser's resize handle re-renders immediately.
+// Matches the CSS breakpoint at Dashboard.css:160 — keep these in
+// sync when adjusting the mobile breakpoint.
+function useMediaQuery(query: string): boolean | null {
+  const [matches, setMatches] = useState<boolean | null>(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return null;
+    return window.matchMedia(query).matches;
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mql = window.matchMedia(query);
+    // Sync the initial value (in case window.matchMedia was undefined
+    // during the lazy initializer — e.g. SSR / StrictMode double-init).
+    setMatches(mql.matches);
+    // addEventListener is the modern API. The deprecated addListener
+    // fallback only matters for Safari < 14 (2020), so we skip it.
+    const handler = (e: MediaQueryListEvent) => setMatches(e.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, [query]);
+  return matches;
 }
 
 interface DoneListProps {

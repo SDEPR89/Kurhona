@@ -338,9 +338,114 @@
   .quadrant { min-height: 180px; }
 }
 
-/* Narrow phones: reflow the header so the five header items don't
-   cram into one row, shrink the toolbar title, and guard task-card
-   text against overflow on very small widths. */
+/* ---------- Mobile bottom nav ----------
+   Hidden on desktop, surfaced at ≤720px. Mirrors the existing mobile
+   breakpoint so layout and the React isMobile state stay in sync.
+   The bar is fixed at the bottom and uses the same glass tokens as
+   the rest of the dashboard so it feels like part of the page, not
+   a separate OS chrome strip. `safe-area-inset-bottom` handles iPhones
+   with notches — without it, the bottom row of buttons would be
+   clipped by the home indicator. */
+.mobile-tabbar {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  /* Reserve room at the bottom of the dashboard so the matrix /
+     calendar panes scroll behind the bar instead of getting hidden
+     under it. The nav itself is fixed and translucent, so content
+     stays visible above the bar; this padding just guarantees the
+     last row of cards isn't permanently under the bar. */
+  .dashboard { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0)); }
+
+  .mobile-tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0));
+    background: var(--glass-bg-strong);
+    border-top: 1px solid var(--glass-border);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.18);
+  }
+
+  .mobile-tab {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 4px;
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    color: var(--fg-muted);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color .15s, background .15s, transform .1s;
+  }
+  .mobile-tab:hover:not(:disabled) {
+    color: var(--fg);
+    background: var(--glass-bg-soft);
+  }
+  .mobile-tab:active:not(:disabled) { transform: translateY(1px); }
+  .mobile-tab:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--accent-teal);
+  }
+
+  .mobile-tab.is-active {
+    color: var(--accent-teal);
+  }
+  /* The top accent strip is purely a visual cue so the active tab
+     reads at a glance even when the icon + label are also colored. */
+  .mobile-tab.is-active::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 28px;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+    background: var(--accent-teal);
+  }
+  /* Position context for the absolute pseudo-strip above. */
+  .mobile-tab { position: relative; }
+
+  .mobile-tab svg {
+    flex: 0 0 auto;
+  }
+
+  /* The settings tab doesn't have an "active" state (it opens a
+     modal), but it still needs the same hit-target + hover affordance
+     as the other two. */
+  .mobile-tab--settings {
+    /* No special styling needed beyond the base — settings isn't a
+       "section" of the dashboard the user lives in, it's a one-off
+       modal opener. */
+  }
+
+  /* Mobile panes: full-bleed feel inside the dashboard padding. The
+     calendar pane uses the full available width since it had no
+     adjacent matrix constraining it on mobile. */
+  .dashboard-pane {
+    width: 100%;
+  }
+  .dashboard-pane--calendar .calendar {
+    margin-top: 0;
+  }
+}
+
+/* ---------- Narrow phones (≤480px) ---------- */
 @media (max-width: 480px) {
   /* Header — two lines: brand on top, controls on a second row. */
   .dashboard-header {

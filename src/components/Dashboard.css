@@ -159,7 +159,15 @@
 
 @media (max-width: 720px) {
   .dashboard { padding: 16px; }
-}
+
+  /* The header gear duplicates the Settings entry in the bottom nav,
+     so hide it on mobile. Keeps the header row from getting crowded
+     with the theme toggle + sign-out + display name already in place,
+     and avoids two ways to open the same modal. The desktop layout
+     still relies on this button. */
+  .header-settings-btn {
+    display: none;
+  }
 
 /* Light-theme ambient depth: layered radial color washes over the ivory
    base. Drifts slowly so the page has the same subtle life as the dark

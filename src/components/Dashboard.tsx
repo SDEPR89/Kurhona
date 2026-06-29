@@ -587,9 +587,14 @@ export function Dashboard({
               : userDisplayUsername ?? userUsername ?? userEmail}
           </span>
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          {/* The settings gear in the header duplicates the Settings
+              entry in the mobile bottom-nav, so we hide it at the
+              mobile breakpoint via CSS (`.header-settings-btn`) using
+              a data attribute. Rendering it always keeps the desktop
+              JSX path identical and avoids an extra conditional. */}
           <button
             type="button"
-            className="header-icon-btn"
+            className="header-icon-btn header-settings-btn"
             onClick={() => setSettingsOpen(true)}
             aria-label="Open settings"
             title="Settings"

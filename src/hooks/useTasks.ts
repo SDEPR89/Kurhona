@@ -79,14 +79,6 @@ export function useTasks(userId: string | null, options: UseTasksOptions = {}) {
 
   const isBusy = useCallback((id: string) => busyIds.has(id), [busyIds]);
 
-  // Ref that mirrors the latest `tasks`. We use this in `reorder` to
-  // build a snapshot at call time (not closure-captured) so two
-  // back-to-back drops see consistent state.
-  const tasksRef = useRef<Task[]>(tasks);
-  useEffect(() => {
-    tasksRef.current = tasks;
-  }, [tasks]);
-
   // Reseed the live mirror from the canonical task list. Skips the
   // update while a drag is in flight (we set the snapshot ref on
   // dragstart and the mirror diverges from `tasks` until dragend or
@@ -102,15 +94,29 @@ export function useTasks(userId: string | null, options: UseTasksOptions = {}) {
   // Snapshot helpers called by the dashboard's DndContext handlers.
   // Snapshot must be a deep clone so subsequent `setLiveTasks` calls
   // can't mutate the captured state; restore overwrites the live
-  // mirror with the snapshot.
+  // mirror with the snapshot then merges in any rows that arrived via
+  // realtime during the drag (present in `tasks` but not in the
+  // snapshot).
+  const mergeSnapshotWithCanonical = (snap: Task[], canonical: Task[]): Task[] => {
+    const snapIds = new Set(snap.map((t) => t.id));
+    const canonicalIds = new Set(canonical.map((t) => t.id));
+    // Snapshot rows that no longer exist in the canonical array (e.g.
+    // the user deleted them via the realtime channel) get dropped.
+    const survivingSnap = snap.filter((t) => canonicalIds.has(t.id));
+    // Canonical rows that didn't exist when we snapshotted (inserted
+    // mid-drag via realtime, or any other writer) get appended.
+    const newRows = canonical.filter((t) => !snapIds.has(t.id));
+    return [...survivingSnap, ...newRows];
+  };
+
   const snapshotLiveTasks = useCallback(() => {
     liveTasksSnapshotRef.current = liveTasks.map((t) => ({ ...t }));
   }, [liveTasks]);
   const restoreLiveTasks = useCallback(() => {
     const snap = liveTasksSnapshotRef.current;
     liveTasksSnapshotRef.current = null;
-    if (snap) setLiveTasks(snap);
-  }, []);
+    if (snap) setLiveTasks(mergeSnapshotWithCanonical(snap, tasks));
+  }, [tasks]);
   const clearLiveTasksSnapshot = useCallback(() => {
     liveTasksSnapshotRef.current = null;
   }, []);
@@ -225,14 +231,9 @@ export function useTasks(userId: string | null, options: UseTasksOptions = {}) {
     [runBusy, surface],
   );
 
-  const setQuadrant = useCallback(
-    async (id: string, quadrant: Quadrant) => updateTask(id, { quadrant }),
-    [updateTask],
-  );
-
   // Calendar reschedule — moves a task to a new due date (or clears it
-  // when passed `null`). Same shape as setQuadrant so the calendar's
-  // drag-and-drop handler can treat both symmetrically.
+  // when passed `null`). The calendar's drag-and-drop handler uses
+  // this directly; there is no per-quadrant analog.
   const setDueDate = useCallback(
     async (id: string, dueDate: string | null) => updateTask(id, { due_date: dueDate }),
     [updateTask],
@@ -307,9 +308,10 @@ export function useTasks(userId: string | null, options: UseTasksOptions = {}) {
   // incoming payload, so `prev.map(t => t.id === row.id ? row : t)`
   // is a no-op for our own writes.
   //
-  // We read from `liveTasksRef` rather than `tasksRef` because the
+  // We read from `liveTasksRef` rather than `tasks` because the
   // dashboard has been re-bucketing the dragged card via setLiveTasks
-  // during the drag — `tasks` is stale by that point. We also write
+  // during the drag — `tasks` (closure-captured via useCallback) is
+  // stale by that point. We also write
   // the optimistic apply through `setLiveTasks` so the UI stays
   // consistent with what the user saw during the drag, then mirror
   // the same change into `setTasks` so the canonical array stays in
@@ -447,7 +449,6 @@ export function useTasks(userId: string | null, options: UseTasksOptions = {}) {
     clearLiveTasksSnapshot,
     createTask,
     updateTask,
-    setQuadrant,
     setDueDate,
     completeTask,
     uncompleteTask,

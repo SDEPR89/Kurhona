@@ -252,7 +252,7 @@ export default function App() {
       // scope: 'global' revokes the refresh token across ALL tabs/devices, so
       // a refresh in another tab won't silently re-sign-in the user.
       await supabase.auth.signOut({ scope: 'global' });
-    } catch (err) {
+    } catch {
       // The sign-out RPC itself failed (e.g. network down, Supabase
       // unreachable). The local session is still valid, so the user
       // remains logged in client-side. Tell them rather than failing
@@ -318,7 +318,7 @@ export default function App() {
     setUser(null);
     try {
       await supabase.auth.signOut({ scope: 'global' });
-    } catch (err) {
+    } catch {
       // Same rationale as onSignOut: if this fails, the recovery
       // session is still alive. Surface it.
       toast.showError("Couldn't sign you out. Please try again.");

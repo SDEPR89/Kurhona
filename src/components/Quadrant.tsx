@@ -51,57 +51,38 @@ export function Quadrant({
   // the header doesn't flicker while the user is hovering.
   const isEmpty = liveTasks.length === 0;
 
-  // Two droppable surfaces share the same sentinel id
-  // (`quadrant:<id>`) that `decodeDropTarget` in src/lib/reorder.ts
-  // understands. Drops onto either append to the end of this
-  // quadrant, so they merge into one logical target from dnd-kit's
-  // point of view:
-  //   - Empty quadrant: the whole <ul> is the droppable (the
-  //     dashed "no tasks here yet" box).
-  //   - Non-empty quadrant: a dedicated ~36px strip above the
-  //     "+ Add task" button is the droppable. Without this strip,
-  //     dnd-kit's closestCenter picks the closest sortable item
-  //     and the empty space below the last card has no obvious
-  //     drop affordance — the user has to aim above the last
-  //     card to land the drop at the bottom.
-  const droppableId = `quadrant:${id}`;
-  // The empty <ul> gets its OWN unique id (`empty:<id>`) so dnd-kit
-  // registers it as a distinct droppable from the append zone. With
-  // the same id on both, dnd-kit's rect map would only carry the
-  // rect of whichever it measured last (the append zone), leaving
-  // `args.droppableRects.get('quadrant:do_first')` returning the
-  // 36px strip while the empty <ul> was effectively invisible to
-  // the collision chain. The dashboard's empty-quadrant boost
-  // detects `kind: 'empty-quadrant'` and translates the id back to
-  // `quadrant:<id>` for `applyMove` (see `getEffectiveOverId`).
-  const emptyDroppableId = `empty:${id}`;
-  // Marker so the dashboard's collision strategy can boost the empty
-  // <ul>'s effective hit area. Without this, the dragged card (still
-  // at its source rect, only translating past the 8px activation
-  // distance) never covers the empty list's rect and pointerWithin
-  // misses the drop zone entirely — leaving the user unable to drop
-  // into an empty quadrant. The 24px padding mirrors the visual
-  // dashed border so the hit area matches what the user sees.
-  const emptyListData = { kind: 'empty-quadrant' as const, quadrant: id };
+  // Two droppable surfaces share the same logical id and the same
+  // `decodeDropTarget` semantic in src/lib/reorder.ts — drops onto
+  // either append to the end of this quadrant. We register just one
+  // `useDroppable` at a time and pick which id to use based on
+  // whether the list is empty:
+  //   - Empty quadrant: id is `empty:<id>` and the data carries
+  //     `kind: 'empty-quadrant'` so the dashboard's collision
+  //     strategy can widen the effective hit area (24px padding
+  //     around the dashed border). The id is `empty:<id>` rather
+  //     than the canonical `quadrant:<id>` because the empty
+  //     droppable must be registered under a unique key — sharing
+  //     an id with the append zone would collapse them in dnd-kit's
+  //     rect map. `getEffectiveOverId` normalizes the id back to
+  //     `quadrant:<id>` for the reorder pipeline.
+  //   - Non-empty quadrant: id is the canonical `quadrant:<id>`.
+  const droppableId = isEmpty ? `empty:${id}` : `quadrant:${id}`;
+  // Empty-quadrant marker for the dashboard's collision strategy —
+  // see the docblock on the hook in `useDragAndDrop.ts`.
+  const droppableData = isEmpty
+    ? ({ kind: 'empty-quadrant' as const, quadrant: id })
+    : undefined;
   const {
-    setNodeRef: setEmptyListRef,
-    isOver: isOverEmpty,
+    setNodeRef: setDropRef,
+    isOver,
   } = useDroppable({
-    id: emptyDroppableId,
+    id: droppableId,
     disabled: reorderDisabled,
-    // Empty-quadrant marker — read by the dashboard's collision
-    // strategy to widen the effective hit area by 24px so the drop
-    // registers the moment the cursor enters the dashed border
-    // instead of waiting for the dragged card to translate.
-    data: isEmpty ? emptyListData : undefined,
+    data: droppableData,
   });
-  const {
-    setNodeRef: setAppendZoneRef,
-    isOver: isOverAppend,
-  } = useDroppable({ id: droppableId, disabled: reorderDisabled });
 
-  const emptyUlClass = `task-list task-list-empty-drop${isOverEmpty ? ' is-over' : ''}`;
-  const appendZoneClass = `task-list-append-zone${isOverAppend ? ' is-over' : ''}`;
+  const emptyUlClass = `task-list task-list-empty-drop${isOver ? ' is-over' : ''}`;
+  const appendZoneClass = `task-list-append-zone${isOver ? ' is-over' : ''}`;
 
   return (
     <section className={`quadrant quadrant-${id}`} aria-label={meta.title}>
@@ -122,7 +103,7 @@ export function Quadrant({
         // Empty quadrant: the whole <ul> IS the drop zone. The
         // dashed border + flex centering make the "no tasks yet"
         // message read as the drop affordance.
-        <ul ref={setEmptyListRef} className={emptyUlClass}>
+        <ul ref={setDropRef} className={emptyUlClass}>
           <p className="quadrant-empty">No tasks here yet.</p>
         </ul>
       ) : (
@@ -149,7 +130,7 @@ export function Quadrant({
             ))}
           </ul>
           <div
-            ref={setAppendZoneRef}
+            ref={setDropRef}
             className={appendZoneClass}
             // Empty alt so screen readers don't announce this; the
             // visible "+ Add task" button below conveys the action.

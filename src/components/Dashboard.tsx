@@ -1,57 +1,26 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  DndContext,
+  DragOverlay,
+} from '@dnd-kit/core';
+import { snapCenterToCursor } from '@dnd-kit/modifiers';
 import { useTasks } from '../hooks/useTasks';
 import { useSubjects } from '../hooks/useSubjects';
 import { useTheme } from '../hooks/useTheme';
+import { useConfirm } from '../hooks/useConfirm';
+import { useToast } from '../hooks/useToast';
+import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useDragAndDrop } from '../hooks/useDragAndDrop';
+import { QUADRANTS } from '../types';
+import type { Quadrant as QuadrantId, Task, Subject } from '../types';
 import { ThemeToggle } from './ThemeToggle';
 import { Quadrant } from './Quadrant';
 import { TaskCard } from './TaskCard';
 import { TaskModal } from './TaskModal';
 import { SettingsModal } from './SettingsModal';
 import { Calendar } from './Calendar';
-import { useConfirm } from '../hooks/useConfirm';
-import { useToast } from '../hooks/useToast';
-import { QUADRANTS } from '../types';
-import type { Quadrant as QuadrantId, Task, Subject } from '../types';
-import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  KeyboardSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-  pointerWithin,
-  rectIntersection,
-  getFirstCollision,
-  type CollisionDetection,
-} from '@dnd-kit/core';
-import type { DragStartEvent, DragEndEvent, DragOverEvent, DragCancelEvent } from '@dnd-kit/core';
-// `snapCenterToCursor` re-anchors the DragOverlay so its center
-// follows the cursor instead of staying glued to the source rect's
-// top-left. Without it the dragged card sits ~250px to the left of
-// the cursor for any non-trivial card width, which made
-// cross-quadrant drops feel like the overlay was "lagging" the
-// pointer. Has no effect with the KeyboardSensor (no coordinates).
-import { snapCenterToCursor } from '@dnd-kit/modifiers';
-
-/**
- * Pixels of effective hit-area padding around an empty quadrant's
- * `<ul>`. The empty list's measured rect is the dashed-border box
- * itself, so without this boost the dragged card (which only moves
- * past the 8px activation distance and thus still overlaps its source
- * rect) would need to translate *into* the empty box to register a
- * collision. 24px matches the visual breathing room around the
- * dashed border so the user's mental model ("I'm hovering the empty
- * box → it should accept the drop") maps to the actual hit area.
- */
-const EMPTY_QUADRANT_HIT_PADDING = 24;
+import { DoneList } from './DoneList';
 import './Dashboard.css';
-import {
-  CALENDAR_TASK_ID_PREFIX,
-  CALENDAR_DAY_ID_PREFIX,
-  decodeCalendarTaskId,
-  decodeCalendarDayId,
-} from './Calendar';
 
 type View = 'active' | 'done';
 type MobileTab = 'matrix' | 'calendar';
@@ -72,33 +41,6 @@ interface Props {
   // Settings → Upgrade section. App.tsx flips the local user out
   // of "anonymous" mode.
   onAccountUpgraded: (newEmail: string) => void;
-}
-
-// Drop targets that represent the whole quadrant (the dashed
-// "no tasks yet" box for an empty quadrant, and the strip above
-// the "+ Add task" button for a non-empty quadrant) share the id
-// `quadrant:<id>`. Helper for the collision-detection strategy
-// below — see `handleDragOver` for the matching logic.
-const QUADRANT_PREFIX = 'quadrant:';
-const EMPTY_PREFIX = 'empty:';
-function isQuadrantId(id: string): id is `${typeof QUADRANT_PREFIX}${QuadrantId}` {
-  return id.startsWith(QUADRANT_PREFIX);
-}
-function isEmptyQuadrantId(id: string): id is `${typeof EMPTY_PREFIX}${QuadrantId}` {
-  return id.startsWith(EMPTY_PREFIX);
-}
-function quadrantIdFromDroppable(id: string): QuadrantId {
-  return id.slice(QUADRANT_PREFIX.length) as QuadrantId;
-}
-function quadrantIdFromEmpty(id: string): QuadrantId {
-  return id.slice(EMPTY_PREFIX.length) as QuadrantId;
-}
-// Translate any "drop on this quadrant" id (both `quadrant:<id>`
-// and `empty:<id>`) into the canonical `quadrant:<id>` form so
-// downstream logic doesn't need to know about the empty variant.
-function getEffectiveOverId(id: string): string {
-  if (isEmptyQuadrantId(id)) return `${QUADRANT_PREFIX}${quadrantIdFromEmpty(id)}`;
-  return id;
 }
 
 export function Dashboard({
@@ -145,458 +87,57 @@ export function Dashboard({
   >(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  // Mobile bottom-nav tab. Only meaningful while `isMobile` is true;
-  // on desktop the bottom nav is hidden and the matrix + calendar are
-  // stacked as they always have been. Default `matrix` so the first
-  // mobile paint shows what the user came back for.
   const [mobileTab, setMobileTab] = useState<MobileTab>('matrix');
   // Live viewport query — mirrors the CSS breakpoint at
-  // Dashboard.css:160 (`@media (max-width: 720px)`) so layout and
-  // render logic stay in lockstep. `null` until the first paint to
-  // avoid flashing the wrong view.
+  // Dashboard.css (`@media (max-width: 720px)`).
   const isMobile = useMediaQuery('(max-width: 720px)');
-  // When the viewport grows past 720px, reset the mobile tab back to
-  // `matrix` so a user who rotated their phone / resized the browser
-  // doesn't come back to a "Calendar" view they can't reach from
-  // desktop. Avoids the need to render two views simultaneously on
-  // the desktop layout (which would mount two DnDContexts, fight
-  // over the calendar droppables, etc.).
+  // When the viewport grows past the breakpoint, reset the mobile
+  // tab back to `matrix` so a rotating phone / resized browser
+  // doesn't strand the user on a Calendar view they can't reach
+  // from desktop.
   useEffect(() => {
     if (isMobile === false) setMobileTab('matrix');
   }, [isMobile]);
-  // Drag-and-drop state. `activeDragId` is the task id currently being
-  // dragged (set on dragstart, cleared on dragend). We use it to
-  // render a translucent clone in <DragOverlay>.
-  const [activeDragId, setActiveDragId] = useState<string | null>(null);
-  // `lastOverId` is the cached drop target from the most recent
-  // dragover tick. After a cross-container move (onDragOver changes
-  // the dragged card's quadrant), dnd-kit briefly reports `over` as
-  // null while the layout shifts; reusing the cached id keeps the
-  // collision chain alive across that frame.
-  const lastOverIdRef = useRef<string | null>(null);
-  // Original source quadrant of the active drag, captured on
-  // dragstart. By the time onDragEnd fires the live mirror has
-  // already re-bucketed the dragged card into the destination, so
-  // `active.quadrant` is no longer the true source. We pass this
-  // value to `reorder` so `applyMove` computes the cross-quadrant
-  // move correctly and rewrites the source bucket's `sort_order`
-  // densely.
-  const dragSourceQuadrantRef = useRef<QuadrantId | null>(null);
-  // Flag set right after we re-bucket the dragged card into a new
-  // container so the next dragover tick can fall back to the cached
-  // id when dnd-kit's pointer math hasn't caught up. Cleared on the
-  // next animation frame.
-  const recentlyMovedToNewContainerRef = useRef(false);
-  const { theme, toggle: toggleTheme } = useTheme();
 
-  // dnd-kit sensors. PointerSensor has an 8px activation distance so
-  // stationary clicks on the card body still reach the inner button
-  // (and the checkbox / delete ×). KeyboardSensor makes the matrix
-  // draggable via Tab → Space → arrow → Space for accessibility.
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor),
-  );
+  // Drag-and-drop logic (collisions, refs, handlers, live grouping)
+  // lives in useDragAndDrop. Dashboard owns the JSX shell.
+  const dnd = useDragAndDrop({
+    liveTasks,
+    setLiveTasks,
+    snapshotLiveTasks,
+    restoreLiveTasks,
+    clearLiveTasksSnapshot,
+    reorder,
+    setDueDate,
+    surface: toast.showError,
+  });
 
-  // Bucket the live mirror by quadrant. While a drag is in flight
-  // this reflects the in-flight reordering; otherwise it mirrors
-  // `tasks` exactly (the hook reseeds `liveTasks` from `tasks`).
-  const liveGroups = useMemo(() => {
+  // Active tab: open tasks grouped by quadrant; Done tab: completed
+  // tasks sorted by completed_at desc.
+  const grouped = useMemo(() => {
+    const active = tasks.filter((t) => !t.completed_at);
+    const done = tasks.filter((t) => !!t.completed_at);
     const groups: Record<QuadrantId, Task[]> = {
       do_first: [],
       schedule: [],
       delegate: [],
       eliminate: [],
     };
-    for (const t of liveTasks) {
-      if (!t.completed_at) groups[t.quadrant].push(t);
-    }
-    for (const q of Object.keys(groups) as QuadrantId[]) {
-      groups[q].sort(taskSort);
-    }
-    return groups;
-  }, [liveTasks]);
-
-  // 3-tier collision strategy (the canonical dnd-kit multiple-
-  // containers chain) PLUS an empty-quadrant boost so the user can
-  // drop into an empty quadrant the moment the cursor crosses the
-  // dashed border.
-  //
-  //   1. Empty-quadrant hit-area boost: any droppable carrying the
-  //      `kind: 'empty-quadrant'` marker (Quadrant.tsx attaches it
-  //      to the empty <ul> only) gets its rect inflated by
-  //      EMPTY_QUADRANT_HIT_PADDING. If the cursor is inside that
-  //      inflated rect, return it as the collision. This is what
-  //      makes dropping into an empty quadrant work — without it,
-  //      `pointerWithin` misses because the dragged card's rect
-  //      hasn't translated yet, and `rectIntersection` misses
-  //      because the cursor is over the padding around the dashed
-  //      border rather than the border itself.
-  //
-  //   2. Pointer-direct: highest fidelity, picks the card under
-  //      the cursor including across quadrant boundaries.
-  //
-  //   3. Rect intersection: catches the empty-quadrant <ul> (when
-  //      the cursor is right on top of it, not in the padding) and
-  //      the append strip when the pointer sits over the dashed
-  //      border rather than a card body.
-  //
-  //   4. Closest center: in-list reorder when the pointer is
-  //      between two cards and nothing else is under it.
-  //
-  // Collision-rect note: dnd-kit's `collisionRect` is the *source
-  // rect translated by the drag delta*, NOT where the visual
-  // DragOverlay renders. With `snapCenterToCursor` the overlay is
-  // re-centered on the cursor but the framework's `collisionRect`
-  // still tracks the source — which means `rectIntersection` and
-  // `closestCenter` would run as if the overlay were still at the
-  // source position, making intra-quadrant reorders feel sluggish.
-  // We rebuild `args` with `collisionRect` re-centered on the
-  // pointer so the framework's geometry matches what the user sees.
-  const collisionDetection: CollisionDetection = useCallback(
-    (args) => {
-      // If the pointer just moved a card across containers, dnd-kit
-      // may briefly report no collision while the layout settles.
-      // Hold the previous target so the drag doesn't appear to drop.
-      if (recentlyMovedToNewContainerRef.current && lastOverIdRef.current) {
-        return [{ id: lastOverIdRef.current }];
-      }
-
-      // 1) Empty-quadrant boost. Walk droppableContainers once and
-      //    synthesize an inflated rect for any 'empty-quadrant'
-      //    droppable. If the cursor (args.pointerCoordinates) falls
-      //    inside the inflated rect, return that droppable
-      //    immediately. Cheaper than re-running rectIntersection
-      //    with a synthesized rect map.
-      //
-      //    The empty droppable has a unique id (`empty:<id>`) so
-      //    dnd-kit tracks it independently from the append zone
-      //    (which uses `quadrant:<id>`). We translate back to
-      //    `quadrant:<id>` here so `findLiveContainer` /
-      //    `decodeDropTarget` see a single canonical id for the
-      //    "drop on this quadrant" semantic.
-      const pointer = args.pointerCoordinates;
-      if (pointer) {
-        for (const container of args.droppableContainers) {
-          if (container.data.current?.kind !== 'empty-quadrant') continue;
-          const rect = args.droppableRects.get(container.id);
-          if (!rect) continue;
-          const pad = EMPTY_QUADRANT_HIT_PADDING;
-          const inflated = {
-            top: rect.top - pad,
-            left: rect.left - pad,
-            right: rect.right + pad,
-            bottom: rect.bottom + pad,
-            width: rect.width + pad * 2,
-            height: rect.height + pad * 2,
-          };
-          if (
-            pointer.x >= inflated.left &&
-            pointer.x <= inflated.right &&
-            pointer.y >= inflated.top &&
-            pointer.y <= inflated.bottom
-          ) {
-            // Return the actual registered id (e.g. `empty:eliminate`).
-            // dnd-kit's droppableContainers map is keyed by the id
-            // passed to useDroppable — for an empty quadrant that's
-            // `empty:<id>`, NOT `quadrant:<id>` (the canonical
-            // append-zone id is only registered when the quadrant has
-            // at least one task). Returning `quadrant:eliminate`
-            // here would make dnd-kit's getOverContainer return
-            // undefined and dispatch `over: null`, dropping the
-            // collision. The canonical form is recovered downstream
-            // by handleDragOver's `getEffectiveOverId` normalization.
-            const id = String(container.id);
-            lastOverIdRef.current = getEffectiveOverId(id);
-            return [{ id }];
-          }
-        }
-      }
-
-      // Rebuild `args` with `collisionRect` re-centered on the
-      // pointer. dnd-kit's chain uses collisionRect for
-      // `rectIntersection` and `closestCenter`; without this fix
-      // they'd run as if the overlay were still glued to the
-      // source's top-left, not where `snapCenterToCursor` actually
-      // placed it.
-      const baseArgs = pointer && args.collisionRect
-        ? {
-            ...args,
-            collisionRect: {
-              top: pointer.y - args.collisionRect.height / 2,
-              left: pointer.x - args.collisionRect.width / 2,
-              right: pointer.x + args.collisionRect.width / 2,
-              bottom: pointer.y + args.collisionRect.height / 2,
-              width: args.collisionRect.width,
-              height: args.collisionRect.height,
-            },
-          }
-        : args;
-
-      // 2) Pointer-direct: highest fidelity, picks the card under
-      //    the cursor including across quadrant boundaries.
-      //    `pointerWithin` uses pointerCoordinates directly, so it
-      //    doesn't need the rebuilt args.
-      const pointerHits = pointerWithin(args);
-      if (pointerHits.length > 0) {
-        const first = pointerHits[0];
-        const id = String(first.id);
-        lastOverIdRef.current = getEffectiveOverId(id);
-        return [{ id }];
-      }
-
-      // 3) Rect intersection: catches the empty-quadrant <ul>
-      //    (when the cursor is right on top of it, not in the
-      //    padding) and the append strip when the pointer sits
-      //    over the dashed border rather than a card body.
-      const rectHits = rectIntersection(baseArgs);
-      if (rectHits.length > 0) {
-        const first = getFirstCollision(rectHits, 'id');
-        if (first) {
-          const id = String(first);
-          lastOverIdRef.current = getEffectiveOverId(id);
-          return [{ id }];
-        }
-      }
-
-      // 4) Closest center: in-list reorder when the pointer is
-      //    between two cards and nothing else is under it.
-      const centerHits = closestCenter(baseArgs);
-      if (centerHits.length > 0) {
-        const first = centerHits[0];
-        const id = String(first.id);
-        lastOverIdRef.current = getEffectiveOverId(id);
-        return [{ id }];
-      }
-
-      // No hit — but if we have a cached id and we're mid-move,
-      // keep returning it so the drag doesn't appear to "drop" on
-      // the gap between cards / quadrants. This is the case when the
-      // pointer is between two containers and dnd-kit can't decide.
-      if (lastOverIdRef.current) return [{ id: lastOverIdRef.current }];
-      return [];
-    },
-    [],
-  );
-
-  function findLiveContainer(id: string): QuadrantId | null {
-    // Droppable ids for whole-quadrant surfaces are `quadrant:<id>`
-    // (append zone, or the canonical id returned by the
-    // empty-quadrant boost in collisionDetection) OR `empty:<id>`
-    // (the empty <ul> directly, when dnd-kit's own pointerWithin /
-    // closestCenter chain wins over our boost). Normalize via
-    // `getEffectiveOverId` so this function only deals with the
-    // canonical form.
-    const effective = getEffectiveOverId(id);
-    if (isQuadrantId(effective)) return quadrantIdFromDroppable(effective);
-    // Otherwise the id is a task id; look up its current bucket in
-    // the live mirror. During a drag this respects the in-flight
-    // reordering.
-    const t = liveTasks.find((x) => x.id === id);
-    return t ? t.quadrant : null;
-  }
-
-  function handleDragStart(e: DragStartEvent) {
-    const activeId = String(e.active.id);
-    // Calendar drags (id prefix `task:`) bypass the matrix's live-
-    // mirror machinery entirely — the calendar renders the dragging
-    // dot's own opacity, and onDragEnd routes the drop to setDueDate.
-    if (activeId.startsWith(CALENDAR_TASK_ID_PREFIX)) {
-      setActiveDragId(activeId);
-      lastOverIdRef.current = null;
-      dragSourceQuadrantRef.current = null;
-      return;
-    }
-    setActiveDragId(activeId);
-    snapshotLiveTasks();
-    lastOverIdRef.current = activeId;
-    // Capture the source quadrant before any re-bucketing. The live
-    // mirror at this point still reflects the canonical `tasks` (no
-    // drag mutations have happened yet), so this is the true origin.
-    const t = liveTasks.find((x) => x.id === activeId);
-    dragSourceQuadrantRef.current = t ? t.quadrant : null;
-  }
-
-  // Mid-drag re-bucket. dnd-kit calls onDragOver continuously while
-  // the pointer moves; if `over` is in a different container than the
-  // active item we move the active item to the new container at the
-  // right index. This is what makes cross-quadrant drag actually
-  // track the cursor — without it the dragged card's transform is
-  // bound to its source SortableContext and it never visually enters
-  // the destination quadrant.
-  function handleDragOver(e: DragOverEvent) {
-    const { active, over } = e;
-    if (!over) return;
-
-    const activeId = String(active.id);
-    const overId = getEffectiveOverId(String(over.id));
-    if (overId === activeId) return;
-
-    // Calendar drags don't need the matrix's re-bucket logic — the
-    // dot is already opaque-on-grab and we only care about the final
-    // day drop. Skip here so we don't accidentally re-bucket a matrix
-    // task that happens to share an id prefix pattern (none today,
-    // but defensive).
-    if (activeId.startsWith(CALENDAR_TASK_ID_PREFIX)) {
-      lastOverIdRef.current = overId.startsWith(CALENDAR_DAY_ID_PREFIX) ? overId : null;
-      return;
-    }
-
-    if (activeId === overId) return;
-
-    const activeContainer = findLiveContainer(activeId);
-    const overContainer = findLiveContainer(overId);
-    if (!activeContainer || !overContainer) return;
-    if (activeContainer === overContainer) {
-      // Same container — let dnd-kit's SortableContext handle the
-      // visual reorder on its own. We still cache the id so the
-      // collision chain can fall back to it.
-      lastOverIdRef.current = overId;
-      return;
-    }
-
-    // Cross-container move. Compute the insert index in the
-    // destination using the dragged item's vertical position
-    // relative to the hovered item's center. Pointer-Y > target-Y
-    // means the user is dragging downward, so the drop should land
-    // *after* the hovered card.
-    setLiveTasks((prev) => {
-      const activeIdx = prev.findIndex((t) => t.id === activeId);
-      if (activeIdx === -1) return prev;
-      const activeItem = prev[activeIdx];
-
-      // Build the destination list with the active item removed.
-      // `insertIdx` is the index within this list where the moved
-      // card should land; len = append.
-      const destList = prev.filter((t) => t.quadrant === overContainer && t.id !== activeId);
-      let insertIdx = destList.length;
-      if (!isQuadrantId(overId)) {
-        // Dropping on a card: insert at the hovered card's index,
-        // adjusted for the pointer-Y heuristic.
-        const overIdxInDest = destList.findIndex((t) => t.id === overId);
-        if (overIdxInDest !== -1) {
-          const activeRect = active.rect.current.translated;
-          const overRect = over.rect;
-          const isBelow =
-            activeRect && overRect && activeRect.top > overRect.top + overRect.height / 2;
-          insertIdx = isBelow ? overIdxInDest + 1 : overIdxInDest;
-        }
-      }
-
-      // Drop the active item from the full array, then splice the
-      // moved card in at the right position. We anchor on either
-      // the predecessor in the destination list (insertIdx > 0) or
-      // the first remaining row of the destination in `next`
-      // (insertIdx === 0); if the destination is empty, just append.
-      const next = prev.filter((_, i) => i !== activeIdx);
-      // Stamp sort_order to the visual insert position so liveGroups
-      // (which sorts by sort_order asc) renders the card where the
-      // user dropped it. The reorder RPC rewrites sort_order densely
-      // on dragend, so this temporary value is overwritten.
-      const moved = { ...activeItem, quadrant: overContainer, sort_order: insertIdx };
-      if (destList.length === 0) {
-        next.push(moved);
-        return next;
-      }
-      const predecessor = insertIdx > 0 ? destList[insertIdx - 1] : null;
-      if (predecessor) {
-        const predIdx = next.findIndex((t) => t.id === predecessor.id);
-        if (predIdx === -1) {
-          // Defensive: predecessor disappeared between filter and
-          // find. Fall back to the first destination row.
-          next.push(moved);
-          return next;
-        }
-        next.splice(predIdx + 1, 0, moved);
-      } else {
-        // insertIdx === 0: anchor on the first destination row and
-        // insert before it.
-        const firstDestId = destList[0].id;
-        const firstDestIdx = next.findIndex((t) => t.id === firstDestId);
-        if (firstDestIdx === -1) {
-          next.push(moved);
-          return next;
-        }
-        next.splice(firstDestIdx, 0, moved);
-      }
-      return next;
+    for (const t of active) groups[t.quadrant].push(t);
+    const doneSorted = [...done].sort((a, b) => {
+      const aT = a.completed_at ?? '';
+      const bT = b.completed_at ?? '';
+      return bT.localeCompare(aT);
     });
+    return { groups, done: doneSorted };
+  }, [tasks]);
 
-    // Hold the layout-shift frame so the next dragover tick keeps
-    // returning the cached id even if dnd-kit's rect math lags.
-    recentlyMovedToNewContainerRef.current = true;
-    requestAnimationFrame(() => {
-      recentlyMovedToNewContainerRef.current = false;
-    });
-    lastOverIdRef.current = overId;
-  }
-
-  async function handleDragEnd(e: DragEndEvent) {
-    setActiveDragId(null);
-    lastOverIdRef.current = null;
-    recentlyMovedToNewContainerRef.current = false;
-    const activeId = String(e.active.id);
-    // Normalize the over id — dnd-kit may report either
-    // `quadrant:<id>` (canonical form from the empty-quadrant
-    // boost) or `empty:<id>` (when its own pointerWithin /
-    // closestCenter chain wins). `reorder` → `applyMove` expects
-    // the canonical `quadrant:<id>` shape.
-    const overId = e.over ? getEffectiveOverId(String(e.over.id)) : null;
-
-    // Calendar reschedule path. The dragged dot's id is prefixed
-    // `task:` and the day's droppable id is prefixed `day:` (both
-    // exported from Calendar.tsx). On a successful drop we update
-    // `due_date` for the task via the hook's setDueDate helper — a
-    // single updateTask call, so no live-mirror snapshot/rollback is
-    // needed; the realtime channel will eventually replace our state
-    // with the server's truth regardless of success/failure.
-    if (activeId.startsWith(CALENDAR_TASK_ID_PREFIX)) {
-      dragSourceQuadrantRef.current = null;
-      if (!overId || !overId.startsWith(CALENDAR_DAY_ID_PREFIX)) return;
-      const taskId = decodeCalendarTaskId(activeId);
-      const newDate = decodeCalendarDayId(overId);
-      const ok = await setDueDate(taskId, newDate);
-      if (!ok) toast.showError("Couldn't reschedule the task. Try again.");
-      return;
-    }
-
-    if (!overId) {
-      // No drop target — cancel by restoring the snapshot. Use
-      // restoreLiveTasks (it also clears the snapshot ref so the
-      // mirror effect resumes seeding from `tasks`).
-      dragSourceQuadrantRef.current = null;
-      restoreLiveTasks();
-      return;
-    }
-    const ok = await reorder(activeId, overId, dragSourceQuadrantRef.current ?? undefined);
-    dragSourceQuadrantRef.current = null;
-    // Whether the RPC succeeded or failed, the snapshot is consumed
-    // — the hook either committed (snapshot is now stale) or rolled
-    // back (liveTasks restored, snapshot discarded). Clearing
-    // explicitly so subsequent realtime-driven reseeds resume.
-    clearLiveTasksSnapshot();
-    if (!ok) {
-      // The hook already surfaces a toast via `surface()` for the
-      // rollback path. The `applyMove` null-result case (stale drop)
-      // doesn't surface anything because it's not user-actionable;
-      // we add a soft message here as a belt-and-braces.
-      toast.showError("Couldn't save the new order. Try again.");
-    }
-  }
-
-  function handleDragCancel(e: DragCancelEvent) {
-    const activeId = String(e.active.id);
-    setActiveDragId(null);
-    lastOverIdRef.current = null;
-    recentlyMovedToNewContainerRef.current = false;
-    dragSourceQuadrantRef.current = null;
-    // Calendar drags never took a snapshot, so there is nothing to
-    // restore. Bail before the restoreLiveTasks() call so we don't
-    // accidentally clobber the matrix mirror when the user cancels
-    // a calendar dot drag.
-    if (activeId.startsWith(CALENDAR_TASK_ID_PREFIX)) return;
-    restoreLiveTasks();
-  }
+  const activeCount =
+    grouped.groups.do_first.length +
+    grouped.groups.schedule.length +
+    grouped.groups.delegate.length +
+    grouped.groups.eliminate.length;
+  const doneCount = grouped.done.length;
 
   async function handleSignOut() {
     if (signingOut) return;
@@ -610,55 +151,10 @@ export function Dashboard({
     }
   }
 
-  // Active tab: open tasks grouped by quadrant, sorted by sort_order
-  // asc (created_at desc as tiebreaker for null rows). Done tab:
-  // completed tasks only, sorted by completed_at desc — most
-  // recently finished first.
-  //
-  // `liveGroups` is the live-mirror bucket — what the matrix grid
-  // renders during a drag. `tasks` is the canonical array; we
-  // compute `grouped.groups` from it for the *count* tabs (so the
-  // badge doesn't flicker while a drag is in flight) and for the
-  // Done list (the live mirror doesn't surface completed tasks).
-  const grouped = useMemo(() => {
-    const active = tasks.filter((t) => !t.completed_at);
-    const done = tasks.filter((t) => !!t.completed_at);
-
-    const groups: Record<QuadrantId, Task[]> = {
-      do_first: [],
-      schedule: [],
-      delegate: [],
-      eliminate: [],
-    };
-    for (const t of active) groups[t.quadrant].push(t);
-    for (const q of Object.keys(groups) as QuadrantId[]) {
-      groups[q].sort(taskSort);
-    }
-
-    const doneSorted = [...done].sort((a, b) => {
-      const aT = a.completed_at ?? '';
-      const bT = b.completed_at ?? '';
-      return bT.localeCompare(aT);
-    });
-
-    return { groups, done: doneSorted };
-  }, [tasks]);
-
-  const activeCount =
-    grouped.groups.do_first.length +
-    grouped.groups.schedule.length +
-    grouped.groups.delegate.length +
-    grouped.groups.eliminate.length;
-  const doneCount = grouped.done.length;
-
   function handleAdd(quadrant: QuadrantId) {
     setEditing({ kind: 'create', quadrant });
   }
 
-  // Click on a calendar cell → open the create modal with that day
-  // pre-filled. The TaskModal reads `initial.due_date` and seeds the
-  // form (no need to also default the quadrant — the user picked
-  // do_first on creation and can change it from the modal).
   function handleAddOnDate(isoDate: string) {
     setEditing({ kind: 'create', quadrant: 'do_first', dueDate: isoDate });
   }
@@ -682,14 +178,15 @@ export function Dashboard({
     subject_id: string | null;
     due_date: string | null;
     quadrant: QuadrantId;
-  }) {
-    if (!editing) return;
-    if (editing.kind === 'create') {
-      await createTask(data);
-    } else {
-      await updateTask(editing.task.id, data);
-    }
+  }): Promise<boolean> {
+    if (!editing) return false;
+    const row =
+      editing.kind === 'create'
+        ? await createTask(data)
+        : await updateTask(editing.task.id, data);
+    if (!row) return false;
     setEditing(null);
+    return true;
   }
 
   async function handleDelete() {
@@ -716,72 +213,56 @@ export function Dashboard({
     void deleteTask(task.id).catch(() => {});
   }
 
+  // Look up the dragged task in the live mirror so the overlay
+  // reflects the in-flight quadrant if the user has already
+  // re-bucketed via onDragOver. Falls back to the canonical
+  // quadrant groups if the task disappeared from the mirror (e.g.
+  // completed_at was set during the drag).
+  const renderOverlay = (): React.ReactNode => {
+    if (!dnd.activeDragId) return null;
+    const liveFound = liveTasks.find((t) => t.id === dnd.activeDragId);
+    const canonicalList = grouped.groups.do_first
+      .concat(grouped.groups.schedule, grouped.groups.delegate, grouped.groups.eliminate);
+    const task = liveFound ?? canonicalList.find((t) => t.id === dnd.activeDragId);
+    if (!task) return null;
+    return (
+      <TaskCard
+        task={task}
+        subject={subjects.find((s) => s.id === task.subject_id)}
+        onToggleComplete={() => {}}
+        onClick={() => {}}
+        onDelete={() => {}}
+        isBusy={false}
+      />
+    );
+  };
+
+  // Calendar's `tasks` prop is the un-filtered active list.
+  const activeTasksForCalendar: Task[] = grouped.groups.do_first
+    .concat(grouped.groups.schedule, grouped.groups.delegate, grouped.groups.eliminate);
+
   return (
     <div
       className={
-        // `is-mobile-calendar` lets CSS hide the Active/Done toolbar
-        // toggle when the calendar tab is open on mobile — the toggle
-        // is meaningless there (calendar shows incomplete tasks only).
         isMobile === true && mobileTab === 'calendar'
           ? 'dashboard is-mobile-calendar'
           : 'dashboard'
       }
     >
-      <header className="dashboard-header">
-        <div className="brand">
-          <div className="brand-mark">A</div>
-          <span>Acme</span>
-        </div>
-        <div className="dashboard-user">
-          <span className="dashboard-display-name">
-            {isAnonymous
-              ? 'Guest'
-              : userDisplayUsername ?? userUsername ?? userEmail}
-          </span>
-          <ThemeToggle theme={theme} onToggle={toggleTheme} />
-          {/* The settings gear in the header duplicates the Settings
-              entry in the mobile bottom-nav, so we hide it at the
-              mobile breakpoint via CSS (`.header-settings-btn`) using
-              a data attribute. Rendering it always keeps the desktop
-              JSX path identical and avoids an extra conditional. */}
-          <button
-            type="button"
-            className="header-icon-btn header-settings-btn"
-            onClick={() => setSettingsOpen(true)}
-            aria-label="Open settings"
-            title="Settings"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-          </button>
-        </div>
-      </header>
+      <DashboardHeader
+        isAnonymous={isAnonymous}
+        userDisplayUsername={userDisplayUsername}
+        userUsername={userUsername}
+        userEmail={userEmail}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
 
-      <div className="dashboard-toolbar">
-        <h1>Eisenhower Matrix</h1>
-        <div className="view-toggle" role="tablist" aria-label="View">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === 'active'}
-            className={`view-tab${view === 'active' ? ' is-active' : ''}`}
-            onClick={() => setView('active')}
-          >
-            Active <span className="view-count">{activeCount}</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === 'done'}
-            className={`view-tab${view === 'done' ? ' is-active' : ''}`}
-            onClick={() => setView('done')}
-          >
-            Done <span className="view-count">{doneCount}</span>
-          </button>
-        </div>
-      </div>
+      <DashboardToolbar
+        view={view}
+        activeCount={activeCount}
+        doneCount={doneCount}
+        onChangeView={setView}
+      />
 
       {error && (
         <p className="dashboard-error" role="alert">
@@ -790,11 +271,6 @@ export function Dashboard({
       )}
 
       {isAnonymous && (
-        // One-line reminder that this session has no email/password
-        // attached. Tapping the link opens Settings where the user
-        // can attach credentials. Kept terse — the upgrade affordance
-        // is duplicated in the Settings modal so the user sees it
-        // whenever they're investigating their account.
         <div className="dashboard-guest-banner" role="status">
           <span>
             You're browsing as a guest. Your tasks save to this browser only.{' '}
@@ -810,208 +286,31 @@ export function Dashboard({
         </div>
       )}
 
-      {/* Three render branches:
-            1. Mobile + Calendar tab  → full-width <Calendar>, no DnD.
-            2. Mobile + Matrix tab    → <DndContext> + matrix only
-                                         (calendar lives in its own tab).
-            3. Desktop (or first paint before matchMedia resolves)
-                                      → original stacked layout
-                                         (matrix + calendar inside
-                                         one DndContext, no mobile
-                                         pane split). Mirror the
-                                         desktop branch's old behavior
-                                         even on a phone when isMobile
-                                         is still null so we don't
-                                         flash a different layout. */}
-      {isMobile === true && mobileTab === 'calendar' ? (
-        <div className="dashboard-view dashboard-pane dashboard-pane--calendar" key="cal">
-          <Calendar
-            tasks={tasks}
-            onTaskClick={handleEdit}
-            onAddOnDate={handleAddOnDate}
-          />
-        </div>
-      ) : view === 'active' ? (
-        <div className="dashboard-view dashboard-pane dashboard-pane--matrix" key="active">
-          <DndContext
-            sensors={sensors}
-            collisionDetection={collisionDetection}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-            onDragCancel={handleDragCancel}
-          >
-            <div className="matrix-grid matrix-grid--enter">
-              {QUADRANTS.map((q) => (
-                <Quadrant
-                  key={q.id}
-                  id={q.id}
-                  tasks={grouped.groups[q.id]}
-                  liveTasks={liveGroups[q.id]}
-                  subjects={subjects}
-                  onAdd={handleAdd}
-                  onToggleComplete={handleToggleComplete}
-                  onTaskClick={handleEdit}
-                  onDelete={handleDeleteTaskFromCard}
-                  isTaskBusy={isTaskBusy}
-                  // Disable drag for every card in every quadrant
-                  // while a reorder RPC is mid-flight. This is the
-                  // user-facing guard against racing two drops; the
-                  // hook also guards internally.
-                  reorderDisabled={reorderBusy}
-                />
-              ))}
-            </div>
-            {/* Calendar is only rendered below the matrix on desktop.
-                On mobile it gets its own tab via the branch above.
-                `!== true` covers both `false` (desktop) and `null`
-                (first paint before matchMedia resolves) — keeps the
-                original behavior of always-mounting during SSR / cold
-                paint. */}
-            {isMobile !== true && (
-              <Calendar
-                tasks={tasks}
-                onTaskClick={handleEdit}
-                onAddOnDate={handleAddOnDate}
-              />
-            )}
-            <DragOverlay
-              // Re-anchors the overlay so its CENTER follows the
-              // cursor instead of staying glued to the source rect's
-              // top-left. Without this modifier dnd-kit positions the
-              // overlay at the source's top-left and only translates
-              // by the drag delta — for a wide card that puts the
-              // visible card ~half its width to the LEFT of the
-              // cursor, which made cross-quadrant drops feel
-              // imprecise. The framework's `collisionRect` is still
-              // source-anchored; the matching fix is in
-              // `collisionDetection` above (rebuild `args` so
-              // rectIntersection / closestCenter see a
-              // cursor-centered rect).
-              modifiers={[snapCenterToCursor]}
-              // Bump z-index above sibling cards so the overlay
-              // can't be covered by a card that's between the cursor
-              // and the source. dnd-kit sets zIndex: 999 by default;
-              // we override with a higher value so the overlay is
-              // unambiguously on top during cross-quadrant drags.
-              zIndex={1000}
-              // Smooth snap-back on invalid drops. dnd-kit's default
-              // dropAnimation is 250ms ease; we keep that timing but
-              // use the same easing curve as the rest of the app
-              // (cubic-bezier(.2,.8,.2,1) — a soft "ease-out-back"
-              // feel) so the snap-back reads as part of the same
-              // motion vocabulary.
-              dropAnimation={{
-                duration: 200,
-                easing: 'cubic-bezier(.2,.8,.2,1)',
-              }}
-            >
-              {activeDragId ? (
-                <div className="drag-overlay">
-                  {(() => {
-                    // Look up the dragged task in the live mirror so
-                    // the overlay reflects the in-flight quadrant if
-                    // the user has already re-bucketed via onDragOver.
-                    // Falls back to the canonical group, then null if
-                    // the task has been removed mid-drag.
-                    const liveFound = liveTasks.find((t) => t.id === activeDragId);
-                    if (liveFound) {
-                      return (
-                        <TaskCard
-                          task={liveFound}
-                          subject={subjects.find((s) => s.id === liveFound.subject_id)}
-                          onToggleComplete={() => {}}
-                          onClick={() => {}}
-                          onDelete={() => {}}
-                          isBusy={false}
-                        />
-                      );
-                    }
-                    for (const q of QUADRANTS) {
-                      const found = grouped.groups[q.id].find((t) => t.id === activeDragId);
-                      if (found) {
-                        return (
-                          <TaskCard
-                            task={found}
-                            subject={subjects.find((s) => s.id === found.subject_id)}
-                            onToggleComplete={() => {}}
-                            onClick={() => {}}
-                            onDelete={() => {}}
-                            isBusy={false}
-                          />
-                        );
-                      }
-                    }
-                    return null;
-                  })()}
-                </div>
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        </div>
-      ) : (
-        <div className="dashboard-view" key="done">
-          <DoneList
-            tasks={grouped.done}
-            subjects={subjects}
-            onToggleComplete={handleToggleComplete}
-            onTaskClick={handleEdit}
-            onDelete={handleDeleteTaskFromCard}
-            loading={loading}
-            isTaskBusy={isTaskBusy}
-          />
-        </div>
-      )}
+      <DashboardView
+        mobileTab={mobileTab}
+        isMobile={isMobile}
+        view={view}
+        dnd={dnd}
+        grouped={grouped}
+        liveGroups={dnd.liveGroups}
+        activeTasksForCalendar={activeTasksForCalendar}
+        loading={loading}
+        subjects={subjects}
+        onAdd={handleAdd}
+        onAddOnDate={handleAddOnDate}
+        onEdit={handleEdit}
+        onToggleComplete={handleToggleComplete}
+        onDelete={handleDeleteTaskFromCard}
+        isTaskBusy={isTaskBusy}
+        reorderBusy={reorderBusy}
+        renderOverlay={renderOverlay}
+      />
 
-      {/* Bottom nav. Always mounted; CSS hides it on desktop. Three
-          entries — Matrix, Calendar, Settings. Settings opens the
-          existing modal rather than a separate route, matching how
-          the desktop header's gear icon works. We use `<button
-          type="button">` (not links) because the destination is
-          in-app state, not a URL. `aria-current="page"` on the active
-          tab announces the current section to screen readers. */}
-      <nav className="mobile-tabbar" aria-label="Dashboard sections">
-        <button
-          type="button"
-          className={`mobile-tab${mobileTab === 'matrix' ? ' is-active' : ''}`}
-          onClick={() => setMobileTab('matrix')}
-          aria-current={mobileTab === 'matrix' ? 'page' : undefined}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <rect x="3" y="3" width="7" height="7" rx="1.2" />
-            <rect x="14" y="3" width="7" height="7" rx="1.2" />
-            <rect x="3" y="14" width="7" height="7" rx="1.2" />
-            <rect x="14" y="14" width="7" height="7" rx="1.2" />
-          </svg>
-          <span>Matrix</span>
-        </button>
-        <button
-          type="button"
-          className={`mobile-tab${mobileTab === 'calendar' ? ' is-active' : ''}`}
-          onClick={() => setMobileTab('calendar')}
-          aria-current={mobileTab === 'calendar' ? 'page' : undefined}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <rect x="3" y="4" width="18" height="18" rx="2" />
-            <line x1="16" y1="2" x2="16" y2="6" />
-            <line x1="8" y1="2" x2="8" y2="6" />
-            <line x1="3" y1="10" x2="21" y2="10" />
-          </svg>
-          <span>Calendar</span>
-        </button>
-        <button
-          type="button"
-          className="mobile-tab mobile-tab--settings"
-          onClick={() => setSettingsOpen(true)}
-          aria-label="Open settings"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-          <span>Settings</span>
-        </button>
-      </nav>
+      <DashboardMobileTabbar
+        mobileTab={mobileTab}
+        onChangeTab={setMobileTab}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
 
       {editing?.kind === 'create' && (
         <TaskModal
@@ -1059,8 +358,6 @@ export function Dashboard({
           isAnonymous={isAnonymous}
           onClose={() => setSettingsOpen(false)}
           onUsernameUpdated={onUsernameUpdated}
-          // Sign-out moved out of the header into the Settings modal
-          // (Session section) so mobile and desktop share one path.
           onSignOut={handleSignOut}
           onAccountDeleted={onAccountDeleted}
           onAccountUpgraded={onAccountUpgraded}
@@ -1070,89 +367,255 @@ export function Dashboard({
   );
 }
 
-// Sort: sort_order ascending when present, created_at desc as the
-// tiebreaker for null rows. Matches the contract on Task.sort_order
-// in src/types.ts — see the docblock there. The previous due-date
-// sort was a per-user preference; the user removed the toggle, so
-// drag-driven order is now the source of truth.
-function taskSort(a: Task, b: Task) {
-  const ao = a.sort_order;
-  const bo = b.sort_order;
-  if (ao !== null && bo !== null) {
-    if (ao !== bo) return ao - bo;
-  } else if (ao !== null) {
-    return -1; // a is sorted, b is null → a first
-  } else if (bo !== null) {
-    return 1; // b is sorted, a is null → b first
-  }
-  return b.created_at.localeCompare(a.created_at);
+// ---------------------------------------------------------------------------
+// Sub-components — inline because they're tightly coupled to
+// Dashboard's state and aren't reused elsewhere. Each owns one
+// visual concern: the header, the Active/Done toolbar, the
+// view-switching branch (matrix / calendar / done), and the mobile
+// tab bar. JSX factored out by concern, not by reuse.
+// ---------------------------------------------------------------------------
+
+interface DashboardHeaderProps {
+  isAnonymous: boolean;
+  userDisplayUsername: string | null;
+  userUsername: string | null;
+  userEmail: string | null;
+  onOpenSettings: () => void;
 }
 
-// Reactive media-query hook. Returns `null` during SSR / first paint
-// (when `window.matchMedia` isn't available), then the live boolean
-// afterward. Subscribes to changes so a user rotating their phone or
-// dragging the browser's resize handle re-renders immediately.
-// Matches the CSS breakpoint at Dashboard.css:160 — keep these in
-// sync when adjusting the mobile breakpoint.
-function useMediaQuery(query: string): boolean | null {
-  const [matches, setMatches] = useState<boolean | null>(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return null;
-    return window.matchMedia(query).matches;
-  });
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mql = window.matchMedia(query);
-    // Sync the initial value (in case window.matchMedia was undefined
-    // during the lazy initializer — e.g. SSR / StrictMode double-init).
-    setMatches(mql.matches);
-    // addEventListener is the modern API. The deprecated addListener
-    // fallback only matters for Safari < 14 (2020), so we skip it.
-    const handler = (e: MediaQueryListEvent) => setMatches(e.matches);
-    mql.addEventListener('change', handler);
-    return () => mql.removeEventListener('change', handler);
-  }, [query]);
-  return matches;
+function DashboardHeader({
+  isAnonymous,
+  userDisplayUsername,
+  userUsername,
+  userEmail,
+  onOpenSettings,
+}: DashboardHeaderProps) {
+  const { theme, toggle: toggleTheme } = useTheme();
+  return (
+    <header className="dashboard-header">
+      <div className="brand">
+        <div className="brand-mark">A</div>
+        <span>Acme</span>
+      </div>
+      <div className="dashboard-user">
+        <span className="dashboard-display-name">
+          {isAnonymous
+            ? 'Guest'
+            : userDisplayUsername ?? userUsername ?? userEmail}
+        </span>
+        <ThemeToggle theme={theme} onToggle={toggleTheme} />
+        <button
+          type="button"
+          className="header-icon-btn header-settings-btn"
+          onClick={onOpenSettings}
+          aria-label="Open settings"
+          title="Settings"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+      </div>
+    </header>
+  );
 }
 
-interface DoneListProps {
-  tasks: Task[];
-  subjects: Subject[];
-  onToggleComplete: (task: Task) => void;
-  onTaskClick: (task: Task) => void;
-  onDelete: (task: Task) => void;
+interface DashboardToolbarProps {
+  view: View;
+  activeCount: number;
+  doneCount: number;
+  onChangeView: (v: View) => void;
+}
+
+function DashboardToolbar({ view, activeCount, doneCount, onChangeView }: DashboardToolbarProps) {
+  return (
+    <div className="dashboard-toolbar">
+      <h1>Eisenhower Matrix</h1>
+      <div className="view-toggle" role="tablist" aria-label="View">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'active'}
+          className={`view-tab${view === 'active' ? ' is-active' : ''}`}
+          onClick={() => onChangeView('active')}
+        >
+          Active <span className="view-count">{activeCount}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'done'}
+          className={`view-tab${view === 'done' ? ' is-active' : ''}`}
+          onClick={() => onChangeView('done')}
+        >
+          Done <span className="view-count">{doneCount}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface DashboardMobileTabbarProps {
+  mobileTab: MobileTab;
+  onChangeTab: (t: MobileTab) => void;
+  onOpenSettings: () => void;
+}
+
+function DashboardMobileTabbar({ mobileTab, onChangeTab, onOpenSettings }: DashboardMobileTabbarProps) {
+  return (
+    <nav className="mobile-tabbar" aria-label="Dashboard sections">
+      <button
+        type="button"
+        className={`mobile-tab${mobileTab === 'matrix' ? ' is-active' : ''}`}
+        onClick={() => onChangeTab('matrix')}
+        aria-current={mobileTab === 'matrix' ? 'page' : undefined}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7" rx="1.2" />
+          <rect x="14" y="3" width="7" height="7" rx="1.2" />
+          <rect x="3" y="14" width="7" height="7" rx="1.2" />
+          <rect x="14" y="14" width="7" height="7" rx="1.2" />
+        </svg>
+        <span>Matrix</span>
+      </button>
+      <button
+        type="button"
+        className={`mobile-tab${mobileTab === 'calendar' ? ' is-active' : ''}`}
+        onClick={() => onChangeTab('calendar')}
+        aria-current={mobileTab === 'calendar' ? 'page' : undefined}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="18" rx="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+        <span>Calendar</span>
+      </button>
+      <button
+        type="button"
+        className="mobile-tab mobile-tab--settings"
+        onClick={onOpenSettings}
+        aria-label="Open settings"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+  );
+}
+
+interface DashboardViewProps {
+  mobileTab: MobileTab;
+  isMobile: boolean | null;
+  view: View;
+  dnd: ReturnType<typeof useDragAndDrop>;
+  grouped: { groups: Record<QuadrantId, Task[]>; done: Task[] };
+  liveGroups: Record<QuadrantId, Task[]>;
+  activeTasksForCalendar: Task[];
   loading: boolean;
-  isTaskBusy?: (taskId: string) => boolean;
+  subjects: Subject[];
+  onAdd: (q: QuadrantId) => void;
+  onAddOnDate: (iso: string) => void;
+  onEdit: (t: Task) => void;
+  onToggleComplete: (t: Task) => void;
+  onDelete: (t: Task) => void;
+  isTaskBusy?: (id: string) => boolean;
+  reorderBusy: boolean;
+  renderOverlay: () => React.ReactNode;
 }
 
-function DoneList({ tasks, subjects, onToggleComplete, onTaskClick, onDelete, loading, isTaskBusy }: DoneListProps) {
-  if (loading) return <p className="dashboard-status">Loading…</p>;
-  if (tasks.length === 0) {
+function DashboardView(props: DashboardViewProps) {
+  const {
+    mobileTab,
+    isMobile,
+    view,
+    dnd,
+    grouped,
+    liveGroups,
+    activeTasksForCalendar,
+    loading,
+    subjects,
+    onAdd,
+    onAddOnDate,
+    onEdit,
+    onToggleComplete,
+    onDelete,
+    isTaskBusy,
+    reorderBusy,
+    renderOverlay,
+  } = props;
+
+  // Three branches: mobile calendar, active (matrix + DnD), done.
+  // The mobile-calendar path skips <DndContext> so calendar drags
+  // don't compete with matrix drops; the active path installs a
+  // single context for both matrix and (desktop) calendar mounts.
+  if (isMobile === true && mobileTab === 'calendar') {
     return (
-      <div className="done-empty done-empty--enter">
-        <p>No completed tasks yet.</p>
-        <p className="muted">Mark a task done in the Active view and it will show up here.</p>
+      <div className="dashboard-view dashboard-pane dashboard-pane--calendar" key="cal">
+        <Calendar tasks={activeTasksForCalendar} onTaskClick={onEdit} onAddOnDate={onAddOnDate} />
+      </div>
+    );
+  }
+
+  if (view === 'active') {
+    return (
+      <div className="dashboard-view dashboard-pane dashboard-pane--matrix" key="active">
+        <DndContext
+          sensors={dnd.sensors}
+          collisionDetection={dnd.collisionDetection}
+          onDragStart={dnd.handleDragStart}
+          onDragOver={dnd.handleDragOver}
+          onDragEnd={dnd.handleDragEnd}
+          onDragCancel={dnd.handleDragCancel}
+        >
+          <div className="matrix-grid matrix-grid--enter">
+            {QUADRANTS.map((q) => (
+              <Quadrant
+                key={q.id}
+                id={q.id}
+                tasks={grouped.groups[q.id]}
+                liveTasks={liveGroups[q.id]}
+                subjects={subjects}
+                onAdd={onAdd}
+                onToggleComplete={onToggleComplete}
+                onTaskClick={onEdit}
+                onDelete={onDelete}
+                isTaskBusy={isTaskBusy}
+                reorderDisabled={reorderBusy}
+              />
+            ))}
+          </div>
+          {isMobile !== true && (
+            <Calendar tasks={activeTasksForCalendar} onTaskClick={onEdit} onAddOnDate={onAddOnDate} />
+          )}
+          <DragOverlay
+            modifiers={[snapCenterToCursor]}
+            zIndex={1000}
+            dropAnimation={{ duration: 200, easing: 'cubic-bezier(.2,.8,.2,1)' }}
+          >
+            <div className="drag-overlay">{renderOverlay()}</div>
+          </DragOverlay>
+        </DndContext>
       </div>
     );
   }
 
   return (
-    <div className="done-list done-list--enter">
-      <ul className="task-list">
-        {tasks.map((task) => {
-          const subject = subjects.find((s) => s.id === task.subject_id);
-          return (
-            <TaskCard
-              key={task.id}
-              task={task}
-              subject={subject}
-              onToggleComplete={() => onToggleComplete(task)}
-              onClick={() => onTaskClick(task)}
-              onDelete={() => onDelete(task)}
-              isBusy={isTaskBusy?.(task.id) ?? false}
-            />
-          );
-        })}
-      </ul>
+    <div className="dashboard-view" key="done">
+      <DoneList
+        tasks={grouped.done}
+        subjects={subjects}
+        onToggleComplete={onToggleComplete}
+        onTaskClick={onEdit}
+        onDelete={onDelete}
+        loading={loading}
+        isTaskBusy={isTaskBusy}
+      />
     </div>
   );
 }

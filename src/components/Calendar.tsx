@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
 import type { Task, Quadrant } from '../types';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
+import {
+  CALENDAR_DAY_ID_PREFIX,
+  CALENDAR_TASK_ID_PREFIX,
+} from '../lib/dragIds';
 import './Calendar.css';
 
 interface Props {
@@ -56,20 +60,12 @@ function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
-// `cell:<isoDate>` matches the droppable id used by <DayCell> below.
-// The Dashboard's onDragEnd handler reads this prefix to route a
-// calendar drop into reschedule instead of the matrix reorder path.
-export const CALENDAR_TASK_ID_PREFIX = 'task:';
-export const CALENDAR_DAY_ID_PREFIX = 'day:';
-export function isCalendarTaskId(id: string): boolean {
-  return id.startsWith(CALENDAR_TASK_ID_PREFIX);
-}
-export function decodeCalendarTaskId(id: string): string {
-  return id.slice(CALENDAR_TASK_ID_PREFIX.length);
-}
-export function decodeCalendarDayId(id: string): string {
-  return id.slice(CALENDAR_DAY_ID_PREFIX.length);
-}
+// Id prefixes for calendar draggables (`task:<id>`) and day-cell
+// droppables (`day:<isoDate>`) live in src/lib/dragIds.ts so the
+// dashboard's drag handler doesn't have to import them from
+// Calendar.tsx. Importing CALENDAR_TASK_ID_PREFIX directly here
+// would defeat the cross-file decoupling, so the constants are
+// referenced via the imported symbols above.
 
 interface DayCellProps {
   date: Date;

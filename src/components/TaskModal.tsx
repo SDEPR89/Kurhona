@@ -17,7 +17,7 @@ interface Props {
     subject_id: string | null;
     due_date: string | null;
     quadrant: Quadrant;
-  }) => Promise<void>;
+  }) => Promise<boolean>;
   onDelete?: () => void;
   // Hook-level predicate: passed straight through to SubjectSelect
   // so a × delete on a subject row disables itself while the request
@@ -77,18 +77,24 @@ export function TaskModal({
       return;
     }
     setBusy(true);
-    try {
-      await onSave({
-        title: trimmed,
-        description: description.trim() || null,
-        subject_id: subjectId || null,
-        due_date: dueDate || null,
-        quadrant,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save task');
+    // `onSave` returns false when the underlying hook call failed
+    // (e.g. network). The hook already surfaces a toast in that
+    // case; the modal stays open so the user can retry without
+    // re-opening. We also show an inline error so the failure
+    // is visible from inside the form, not only in the toast.
+    const ok = await onSave({
+      title: trimmed,
+      description: description.trim() || null,
+      subject_id: subjectId || null,
+      due_date: dueDate || null,
+      quadrant,
+    });
+    if (!ok) {
+      setError("Couldn't save the task. Please try again.");
       setBusy(false);
     }
+    // On success the parent closes the modal (and unmounts us), so
+    // we deliberately don't reset `busy` here.
   }
 
   return (

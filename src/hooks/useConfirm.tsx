@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 
@@ -20,9 +20,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 //   if (!ok) return;
 //
 // Concurrent calls are queued: each request gets a Promise, and the
-// dialog walks through the queue one at a time. The most recent call
-// always wins the *current* dialog, but earlier calls don't disappear —
-// they each wait their turn.
+// dialog walks through the queue one at a time.
 // ---------------------------------------------------------------------------
 
 export interface ConfirmOptions {
@@ -47,35 +45,51 @@ interface ConfirmContextValue {
 const ConfirmContext = createContext<ConfirmContextValue | null>(null);
 
 export function ConfirmProvider({ children }: { children: ReactNode }) {
-  // FIFO queue. We keep an array instead of a single ref so multiple
-  // confirms fire in quick succession (e.g. a script-like bulk delete
-  // path) all get answered rather than swallowed.
+  // Active dialog. State drives the render; the ref lets `confirm`
+  // synchronously check whether the queue should be advanced without
+  // waiting for React to commit a state update.
   const [active, setActive] = useState<PendingConfirm | null>(null);
+  const activeRef = useRef<PendingConfirm | null>(null);
+  // FIFO queue. Lives in a ref (not state) so we can mutate it
+  // synchronously inside `confirm` without forcing a render. The
+  // `advance()` helper moves the head into `active` and triggers the
+  // re-render that shows the dialog.
   const queueRef = useRef<PendingConfirm[]>([]);
 
-  const confirm = useCallback((opts: ConfirmOptions): Promise<boolean> => {
-    return new Promise<boolean>((resolve) => {
-      queueRef.current.push({ ...opts, resolve });
-      // If nothing is showing, immediately surface the head of the queue.
-      setActive((current) => current ?? queueRef.current.shift() ?? null);
-    });
+  // Promote the head of the queue into `active`. Called whenever the
+  // queue might have grown (after a `confirm` call) or after the
+  // current dialog resolved.
+  const advance = useCallback(() => {
+    if (activeRef.current) return;
+    const next = queueRef.current.shift() ?? null;
+    activeRef.current = next;
+    setActive(next);
   }, []);
 
-  // Whenever the active confirm resolves, the next one (if any) is
-  // promoted. This effect keeps `active` in sync with the queue after
-  // each resolution.
-  useEffect(() => {
-    if (active) return;
-    const next = queueRef.current.shift();
-    if (next) setActive(next);
-  }, [active]);
+  const confirm = useCallback(
+    (opts: ConfirmOptions): Promise<boolean> => {
+      return new Promise<boolean>((resolve) => {
+        queueRef.current.push({ ...opts, resolve });
+        advance();
+      });
+    },
+    [advance],
+  );
 
-  const handleResolve = useCallback((ok: boolean) => {
-    setActive((current) => {
-      if (current) current.resolve(ok);
-      return null;
-    });
-  }, []);
+  const handleResolve = useCallback(
+    (ok: boolean) => {
+      // Capture-and-resolve outside the state updater so we never run
+      // a side effect during reconciliation (StrictMode replays
+      // updaters, which would call resolve() twice).
+      const current = activeRef.current;
+      activeRef.current = null;
+      setActive(null);
+      current?.resolve(ok);
+      // Promote the next dialog, if any.
+      advance();
+    },
+    [advance],
+  );
 
   return (
     <ConfirmContext.Provider value={{ confirm }}>

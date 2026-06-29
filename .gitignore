@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local env — Vercel reads its own env config; don't ship local copies.
+.env
+.env.*
+!.env.example

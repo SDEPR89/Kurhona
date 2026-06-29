@@ -538,9 +538,13 @@
     overflow-wrap: anywhere;
   }
   /* Reduce outer dashboard padding further. The 720px rule above
-     already drops to 16px; on a phone we want a touch more room. */
+     already drops to 16px; on a phone we want a touch more room.
+     padding-bottom re-asserts the bottom-nav reservation from the
+     ≤720px block — `padding: 12px` would otherwise wipe it and the
+     fixed tabbar would overlap the last quadrant. */
   .dashboard {
     padding: 12px;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0));
   }
 }
 

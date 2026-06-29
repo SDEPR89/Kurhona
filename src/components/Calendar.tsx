@@ -172,7 +172,13 @@ function TaskDot({ task, onClick }: TaskDotProps) {
       <button
         ref={setNodeRef}
         type="button"
-        className={`calendar-task-dot calendar-task-dot--${task.quadrant as Quadrant}`}
+        // The DB enum is `do_first` (snake_case) but Calendar.css's
+        // modifier classes use kebab-case (`.calendar-task-dot--do-first`).
+        // Replace the underscore so the class matches — without this,
+        // do_first dots fall through to the transparent default and
+        // render as the empty cell background (looks black-and-white
+        // against the dim cell).
+        className={`calendar-task-dot calendar-task-dot--${(task.quadrant as Quadrant).replace('_', '-')}`}
         style={style}
         aria-label={`${task.title} (${task.quadrant})`}
         onClick={handleClick}

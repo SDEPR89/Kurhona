@@ -409,14 +409,14 @@ function DashboardHeader({
     <header className="dashboard-header">
       <div className="brand">
         <div className="brand-mark">A</div>
-        <span>Acme</span>
-      </div>
-      <div className="dashboard-user">
+        <span className="brand-name">Acme</span>
         <span className="dashboard-display-name">
           {isAnonymous
             ? 'Guest'
             : userDisplayUsername ?? userUsername ?? userEmail}
         </span>
+      </div>
+      <div className="dashboard-user">
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
         {isMobile !== true && (
           <button

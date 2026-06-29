@@ -236,6 +236,7 @@
 
 .dashboard-display-name {
   color: var(--fg-muted);
+  font-weight: 400;
   font-size: 13px;
   transition: color .35s ease;
 }
@@ -482,19 +483,23 @@
   .brand {
     flex: 1;
     min-width: 0;
+    gap: 6px;
+    margin-bottom: 0;
   }
+  .brand-name { white-space: nowrap; }
   /* Username — inline with the brand. Plain text (not a pill) so
      it doesn't add visual weight to the top bar. The ' · ' separator
      before the name comes from the brand's trailing span via a
      flex gap on .brand. */
   .dashboard-display-name {
     color: var(--fg-muted);
+    font-weight: 400;
     font-size: 13px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
-    max-width: 50vw;
+    flex: 0 1 auto;
   }
   .dashboard-display-name::before {
     content: '· ';

@@ -481,11 +481,34 @@
     justify-content: flex-end;
     gap: 8px;
   }
-  /* Hide the verbose display-name on the smallest screens; the
-     buttons + brand are enough context. The full username is still
-     shown in the settings modal. */
+  /* Username pill — rounded-rectangle chip on the right of the
+     header. Matches the Acme.png mockup: long pill with the
+     user's name inside, theme toggle sits to its left as a
+     small square. */
   .dashboard-display-name {
-    display: none;
+    display: inline-flex;
+    align-items: center;
+    max-width: 50vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 5px 12px;
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    background: var(--glass-bg);
+    color: var(--fg-muted);
+    font-size: 13px;
+    line-height: 1.2;
+  }
+  /* Theme toggle — explicit square with aspect-ratio so it stays
+     a square even if the inner icon size changes. Slightly larger
+     than the icon-only buttons to read as a "square" rather than a
+     dot, matching the mockup. */
+  .theme-toggle {
+    width: 38px;
+    height: 38px;
+    aspect-ratio: 1;
+    border-radius: 10px;
   }
   /* Toolbar: smaller title so the view-toggle fits comfortably. */
   .dashboard-toolbar h1 {

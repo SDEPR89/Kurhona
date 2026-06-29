@@ -260,7 +260,7 @@ export function Dashboard({
         // before useMediaQuery resolves to true; otherwise the gear
         // would flash in then disappear).
         onOpenSettings={() => setSettingsOpen(true)}
-        isMobile={isMobile !== true}
+        isMobile={isMobile}
       />
 
       <DashboardToolbar

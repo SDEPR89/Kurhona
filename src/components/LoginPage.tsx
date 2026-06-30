@@ -291,7 +291,7 @@ export function LoginPage() {
       <div className="login-brand-top">
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
         <div className="brand-mark">A</div>
-        <span>Acme</span>
+        <span>Kurhona</span>
       </div>
 
       {/* Centered glass card */}

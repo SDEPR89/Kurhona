@@ -468,7 +468,7 @@
 
 /* ---------- Narrow phones (≤480px) ---------- */
 @media (max-width: 480px) {
-  /* Header — single line, vertically compact. Brand mark + 'Acme'
+  /* Header — single line, vertically compact. Brand mark + 'Kurhona'
      on the left, theme square on the right. The username text
      sits inline with the brand (its `::before` adds the '· '
      separator) so the header stays one row on narrow phones.

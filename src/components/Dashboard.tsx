@@ -409,7 +409,7 @@ function DashboardHeader({
     <header className="dashboard-header">
       <div className="brand">
         <div className="brand-mark">A</div>
-        <span className="brand-name">Acme</span>
+        <span className="brand-name">Kurhona</span>
         <span className="dashboard-display-name">
           {isAnonymous
             ? 'Guest'

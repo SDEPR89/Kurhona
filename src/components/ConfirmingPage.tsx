@@ -48,7 +48,7 @@ export function ConfirmingPage({ onCancel, sessionEstablished, timedOut }: Props
       <header className="confirming-page-header">
         <div className="brand">
           <div className="brand-mark">A</div>
-          <span>Acme</span>
+          <span>Kurhona</span>
         </div>
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
       </header>

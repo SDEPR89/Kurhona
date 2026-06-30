@@ -82,7 +82,7 @@ export function ResetPassword({ onComplete, onCancel }: Props) {
       <div className="card">
         <div className="brand">
           <div className="brand-mark">A</div>
-          <span>Acme</span>
+          <span>Kurhona</span>
         </div>
 
         <h1>Set a new password</h1>

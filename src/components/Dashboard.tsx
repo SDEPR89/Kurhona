@@ -103,7 +103,8 @@ export function Dashboard({
   // Deadline notification system — schedules browser push notifications
   // for tasks with upcoming due dates. Only active when the user opts in
   // via the bell toggle in the sidebar.
-  const notif = useNotifications(tasks);
+  const notif = useNotifications(tasks, userId);
+
 
   // Drag-and-drop logic (collisions, refs, handlers, live grouping)
   // lives in useDragAndDrop. Dashboard owns the JSX shell.

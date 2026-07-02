@@ -331,3 +331,27 @@ grant execute on function public.reorder_tasks(uuid, quadrant, uuid[]) to authen
 -- is the official Supabase-documented way to nudge it.
 -- ---------------------------------------------------------------------------
 notify pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------------
+-- Push subscriptions — stores Web Push subscription objects per user.
+-- One row per (user_id, endpoint) pair; endpoint is globally unique
+-- because each browser/device produces a distinct push endpoint URL.
+-- ---------------------------------------------------------------------------
+create table if not exists push_subscriptions (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid references auth.users(id) on delete cascade not null,
+  endpoint     text not null unique,
+  p256dh       text not null,   -- client public key (base64url)
+  auth_key     text not null,   -- client auth secret (base64url)
+  created_at   timestamptz not null default now()
+);
+
+alter table push_subscriptions enable row level security;
+
+-- Users can only read/write their own subscriptions
+create policy if not exists "push_subscriptions: owner select"
+  on push_subscriptions for select using (auth.uid() = user_id);
+create policy if not exists "push_subscriptions: owner insert"
+  on push_subscriptions for insert with check (auth.uid() = user_id);
+create policy if not exists "push_subscriptions: owner delete"
+  on push_subscriptions for delete using (auth.uid() = user_id);

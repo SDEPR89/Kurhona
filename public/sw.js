@@ -1,34 +1,56 @@
-// Kurhona Service Worker — deadline notification scheduler
-// Receives a list of { id, title, body, fireAt } from the main thread,
-// stores them in a Map keyed by notification id, and fires each one
-// via setTimeout when the time arrives.
+// Kurhona Service Worker
+// Handles real Web Push events (fired by the push server / Edge Function)
+// AND falls back to client-side setTimeout scheduling when the app is open.
 
-const scheduledTimers = new Map(); // notificationId → timeoutId
+// ---------------------------------------------------------------------------
+// Real push events — fired by the server even when the app is closed
+// ---------------------------------------------------------------------------
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
 
-// Handle messages from the main thread
+  let data;
+  try {
+    data = event.data.json();
+  } catch {
+    data = { title: '⏰ Kurhona Reminder', body: event.data.text() };
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title ?? '⏰ Kurhona Reminder', {
+      body:   data.body  ?? 'You have an upcoming deadline.',
+      icon:   data.icon  ?? '/favicon.png',
+      badge:  '/favicon.png',
+      tag:    data.tag   ?? 'kurhona-deadline',
+      requireInteraction: false,
+      data: { url: self.location.origin },
+    })
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Client-side fallback scheduling (setTimeout) — works while app is open
+// Used as a backup for tasks added after the last cron run.
+// ---------------------------------------------------------------------------
+const scheduledTimers = new Map();
+
 self.addEventListener('message', (event) => {
   const { type, notifications } = event.data ?? {};
 
   if (type === 'SCHEDULE_NOTIFICATIONS') {
-    // Cancel all existing timers first — we always receive the full
-    // current schedule so a full replace is safe.
-    for (const timerId of scheduledTimers.values()) {
-      clearTimeout(timerId);
-    }
+    for (const timerId of scheduledTimers.values()) clearTimeout(timerId);
     scheduledTimers.clear();
 
     const now = Date.now();
-
     for (const notif of notifications ?? []) {
       const delay = notif.fireAt - now;
-      if (delay < 0) continue; // already past — skip
+      if (delay < 0) continue;
 
       const timerId = setTimeout(() => {
         self.registration.showNotification(notif.title, {
-          body: notif.body,
-          icon: '/favicon.png',
+          body:  notif.body,
+          icon:  '/favicon.png',
           badge: '/favicon.png',
-          tag: notif.id,          // deduplicates if re-scheduled
+          tag:   notif.id,
           requireInteraction: false,
           data: { url: self.location.origin },
         });
@@ -40,14 +62,14 @@ self.addEventListener('message', (event) => {
   }
 
   if (type === 'CANCEL_ALL') {
-    for (const timerId of scheduledTimers.values()) {
-      clearTimeout(timerId);
-    }
+    for (const timerId of scheduledTimers.values()) clearTimeout(timerId);
     scheduledTimers.clear();
   }
 });
 
-// Clicking a notification focuses the app (or opens a new tab if closed)
+// ---------------------------------------------------------------------------
+// Notification click — focus or open the app
+// ---------------------------------------------------------------------------
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const targetUrl = event.notification.data?.url ?? self.location.origin;
@@ -66,7 +88,10 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-self.addEventListener('install', () => self.skipWaiting());
+// ---------------------------------------------------------------------------
+// Lifecycle
+// ---------------------------------------------------------------------------
+self.addEventListener('install',  () => self.skipWaiting());
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });

@@ -329,15 +329,15 @@ export function Visualizer3D({
     const startCamPos = new THREE.Vector3();
     const endCamPos = new THREE.Vector3();
 
-    // Track pointer movement
+    // Track pointer movement (mouse/stylus)
     const onPointerMove = (event: PointerEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     };
 
-    // Track click on node
-    const onCanvasClick = () => {
+    // Shared hit-test + zoom logic used by both click and tap
+    const trySelectAtMouse = () => {
       raycaster.setFromCamera(mouse, camera);
       const intersects = raycaster.intersectObjects(
         taskNodes.map(n => n.mesh)
@@ -351,11 +351,10 @@ export function Visualizer3D({
           startTarget.copy(controls.target);
           startCamPos.copy(camera.position);
           animationStartTime = performance.now();
-          currentAnimationDuration = 500; // 500ms for click intro
+          currentAnimationDuration = 500;
           isAnimating = true;
           outroMode = false;
-          controls.enabled = false; // Block user rotation/pan interactions during zoom-in flight
-
+          controls.enabled = false;
           setTimeout(() => {
             onEdit(matchedNode.task);
           }, 500);
@@ -363,8 +362,45 @@ export function Visualizer3D({
       }
     };
 
+    // Mouse click (desktop)
+    const onCanvasClick = () => {
+      trySelectAtMouse();
+    };
+
+    // Touch tap (mobile / iPad)
+    // We track where the finger went down so we can distinguish a tap
+    // from a scroll/drag. Only treat it as a tap if the finger didn't
+    // move more than 10px — otherwise it's a pan and we ignore it.
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length === 1) {
+        touchStartX = event.touches[0].clientX;
+        touchStartY = event.touches[0].clientY;
+      }
+    };
+
+    const onTouchEnd = (event: TouchEvent) => {
+      if (event.changedTouches.length !== 1) return;
+      const touch = event.changedTouches[0];
+      const dx = touch.clientX - touchStartX;
+      const dy = touch.clientY - touchStartY;
+      // Only fire if it's a tap (not a scroll/pan)
+      if (Math.sqrt(dx * dx + dy * dy) > 10) return;
+
+      // Update the mouse vector from the tap position
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((touch.clientY - rect.top) / rect.height) * 2 + 1;
+
+      trySelectAtMouse();
+    };
+
     window.addEventListener('pointermove', onPointerMove);
     canvas.addEventListener('click', onCanvasClick);
+    canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+    canvas.addEventListener('touchend', onTouchEnd, { passive: true });
 
     // Theme listener via MutationObserver
     const observer = new MutationObserver(() => {
@@ -692,9 +728,11 @@ export function Visualizer3D({
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('resize', handleResize);
       observer.disconnect();
-      
+
       if (canvas) {
         canvas.removeEventListener('click', onCanvasClick);
+        canvas.removeEventListener('touchstart', onTouchStart);
+        canvas.removeEventListener('touchend', onTouchEnd);
       }
 
       delete (window as any).resetVisCamera;

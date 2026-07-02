@@ -1127,6 +1127,8 @@ button.task-status-dot.status-dot--submitted::before {
   font: inherit;
   font-size: 13px;
   cursor: pointer;
+  width: 100%;
+  min-height: 44px; /* touch target */
   transition:
     color .18s,
     border-color .2s,
@@ -1145,6 +1147,18 @@ button.task-status-dot.status-dot--submitted::before {
   transform: translateY(-1px);
   box-shadow: 0 6px 18px rgba(27, 163, 156, 0.25);
 }
+
+/* On mobile, make the add button even taller and bolder */
+@media (max-width: 720px) {
+  .add-btn {
+    min-height: 52px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+}
+
+
 
 /* ---------- Done view ---------- */
 .done-list,
@@ -1190,6 +1204,9 @@ button.task-status-dot.status-dot--submitted::before {
   z-index: 100;
   animation: fade-in .25s ease-out;
   transition: background .35s ease;
+  /* Prevent scroll bleed-through on iOS */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 @keyframes fade-in {
@@ -1201,9 +1218,11 @@ button.task-status-dot.status-dot--submitted::before {
   position: relative;
   width: 100%;
   max-width: 460px;
-  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 20px 22px;
+  overscroll-behavior: contain;
 
   background: var(--modal-bg);
   border: 1px solid var(--modal-border);
@@ -1290,9 +1309,78 @@ button.task-status-dot.status-dot--submitted::before {
   gap: 12px;
 }
 
+/* ---- Mobile: bottom-sheet modal ---- */
+@media (max-width: 720px) {
+  /* Backdrop: align modal to the bottom of the screen */
+  .modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  /* Modal slides up from the bottom like a native sheet */
+  .modal {
+    max-width: 100%;
+    width: 100%;
+    max-height: calc(92dvh - env(safe-area-inset-bottom, 0px));
+    border-radius: 20px 20px 0 0;
+    padding: 20px 18px calc(16px + env(safe-area-inset-bottom, 0px));
+    animation: modal-in-mobile .32s cubic-bezier(.2, .8, .2, 1);
+  }
+
+  /* Drag-handle indicator (visual only) */
+  .modal::after {
+    content: '';
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--divider);
+  }
+
+  /* Larger touch-friendly inputs */
+  .task-form .input,
+  .task-form .textarea {
+    padding: 13px 14px;
+    font-size: 16px; /* Prevents iOS auto-zoom on focus */
+    min-height: 48px;
+  }
+
+  /* Stack date + time vertically */
+  .form-row { grid-template-columns: 1fr; }
+
+  /* Bigger action buttons */
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger {
+    min-height: 48px;
+    font-size: 15px;
+    padding: 12px 18px;
+  }
+
+  /* Modal close button bigger tap target */
+  .modal-close {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+  }
+}
+
+@keyframes modal-in-mobile {
+  from { opacity: 0; transform: translateY(100%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ≤480px: also stack form-row (redundant safety net) */
 @media (max-width: 480px) {
   .form-row { grid-template-columns: 1fr; }
 }
+
 
 .task-form .field {
   display: grid;

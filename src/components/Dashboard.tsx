@@ -357,8 +357,13 @@ export function Dashboard({
           view={view}
           onChangeView={setView}
           onOpenSettings={() => setSettingsOpen(true)}
+          notifSupported={notif.isSupported}
+          notifPermission={notif.permission}
+          notifEnabled={notif.isEnabled}
+          onNotifToggle={notif.toggle}
         />
       )}
+
 
       {editing?.kind === 'create' && (
         <TaskModal
@@ -677,9 +682,13 @@ interface DashboardMobileTabbarProps {
   view: View;
   onChangeView: (v: View) => void;
   onOpenSettings: () => void;
+  notifSupported: boolean;
+  notifPermission: NotificationPermission | 'unsupported';
+  notifEnabled: boolean;
+  onNotifToggle: () => Promise<void>;
 }
 
-function DashboardMobileTabbar({ view, onChangeView, onOpenSettings }: DashboardMobileTabbarProps) {
+function DashboardMobileTabbar({ view, onChangeView, onOpenSettings, notifSupported, notifPermission, notifEnabled, onNotifToggle }: DashboardMobileTabbarProps) {
   return (
     <nav className="mobile-tabbar" aria-label="Dashboard sections">
       <button
@@ -747,6 +756,30 @@ function DashboardMobileTabbar({ view, onChangeView, onOpenSettings }: Dashboard
         </svg>
         <span>Settings</span>
       </button>
+
+      {/* Bell tab — only when browser supports notifications */}
+      {notifSupported && (
+        <button
+          type="button"
+          className={`mobile-tab mobile-tab--bell notification-bell${notifEnabled ? ' is-enabled' : ''}${notifPermission === 'denied' ? ' is-blocked' : ''}`}
+          onClick={onNotifToggle}
+          aria-label={notifEnabled ? 'Notifications on — tap to turn off' : 'Turn on deadline reminders'}
+          aria-pressed={notifEnabled}
+        >
+          {notifEnabled ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="0" aria-hidden="true">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+          )}
+          <span>{notifEnabled ? 'Alerts On' : 'Alerts'}</span>
+        </button>
+      )}
     </nav>
   );
 }

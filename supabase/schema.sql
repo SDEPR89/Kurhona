@@ -331,3 +331,161 @@ grant execute on function public.reorder_tasks(uuid, quadrant, uuid[]) to authen
 -- is the official Supabase-documented way to nudge it.
 -- ---------------------------------------------------------------------------
 notify pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------------
+-- Reminders (web push notifications).
+--
+-- End-to-end flow:
+--   1. Browser (PWA installed) subscribes via Web Push, the
+--      usePushSubscription hook POSTs the endpoint + keys to
+--      push_subscriptions.
+--   2. The hourly pg_cron job scans incomplete tasks, inserts one row
+--      per (task, tier) into notification_log when the task is in a
+--      reminder window. ON CONFLICT DO NOTHING dedupes across runs.
+--   3. The cron body then calls the `send-push` Edge Function via
+--      pg_net.http_post (async — no response handling here).
+--   4. The Edge Function reads unsent log rows, fans out via Web
+--      Push, marks rows as sent, and drops subscriptions that came
+--      back 404/410.
+--
+-- Required Supabase setup (one-time, manual):
+--   - Enable `pg_cron` and `pg_net` in Database → Extensions.
+--   - Set the two GUCs so the cron body doesn't hardcode secrets:
+--       ALTER DATABASE postgres SET app.send_push_url =
+--         'https://<project-ref>.supabase.co/functions/v1/send-push';
+--       ALTER DATABASE postgres SET app.send_push_key =
+--         '<SHARED_CRON_SECRET>';
+--   - Store VAPID keys + SHARED_CRON_SECRET as Supabase Function
+--     secrets (the cron body reads them via net.http_post headers).
+-- ---------------------------------------------------------------------------
+
+create table if not exists push_subscriptions (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid references auth.users(id) on delete cascade not null,
+  -- The browser's push service endpoint (FCM/Mozilla/Apple). One
+  -- row per device. Unique so a re-subscribe on the same device
+  -- upserts instead of duplicating.
+  endpoint    text not null unique,
+  -- p256dh and auth are the user's ECDH public key + 16-byte shared
+  -- secret from the browser's PushSubscription.getKey(). Web Push
+  -- encrypts the payload against these so the push service can't
+  -- read the body.
+  p256dh      text not null,
+  auth        text not null,
+  user_agent  text,
+  created_at  timestamptz not null default now()
+);
+alter table push_subscriptions enable row level security;
+drop policy if exists "push_subscriptions: own rows" on push_subscriptions;
+create policy "push_subscriptions: own rows" on push_subscriptions
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- Dedup table. PK (task_id, tier) so the same reminder never fires
+-- twice for the same task window. The Edge Function sets `sent_at`
+-- on success; null = queued but not yet delivered. The
+-- `notification_log: read own` policy lets the settings UI show
+-- "last reminded 2h ago" — only the cron job (via the service role
+-- bypassing RLS) and the Edge Function write to this table.
+create table if not exists notification_log (
+  task_id    uuid not null,
+  user_id    uuid not null,
+  tier       text not null check (tier in ('3d','1d','1h')),
+  sent_at    timestamptz,
+  created_at timestamptz not null default now(),
+  primary key (task_id, tier),
+  -- FK to tasks is required for the Edge Function to embed the task
+  -- title via PostgREST's `tasks!inner(title)` join. Without it,
+  -- PostgREST can't see the relationship and the join returns
+  -- "Could not find a relationship between 'notification_log' and
+  -- 'tasks' in the schema cache".
+  foreign key (task_id) references tasks(id) on delete cascade
+);
+alter table notification_log enable row level security;
+drop policy if exists "notification_log: read own" on notification_log;
+create policy "notification_log: read own" on notification_log
+  for select using (user_id = auth.uid());
+create index if not exists notification_log_unsent_idx
+  on notification_log (sent_at) where sent_at is null;
+
+-- pg_cron / pg_net have to be enabled in the Supabase dashboard
+-- (Database → Extensions) before `cron.schedule()` is callable.
+-- These statements are no-ops if the extensions are already there.
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+-- Drop + re-create so re-running the schema replaces the schedule
+-- if the SQL body changed. `cron.unschedule` errors on a missing
+-- job, so we wrap it in a DO block that swallows the no-op case.
+do $$
+begin
+  perform cron.unschedule('queue-due-reminders');
+exception
+  when others then
+    -- job didn't exist yet; nothing to drop. This is the first-run case.
+    null;
+end $$;
+select cron.schedule(
+  'queue-due-reminders',
+  -- 7 minutes past the hour: spread load off the :00 thundering
+  -- herd. Tasks are date-precision so hourly cadence is plenty.
+  '7 * * * *',
+  $cron$
+    with target_times as (
+      select
+        t.id, t.user_id, t.title, t.due_date, t.due_time,
+        ((t.due_date::timestamp) + coalesce(t.due_time, time '00:00'))
+          at time zone 'UTC' as due_at
+      from tasks t
+      where t.completed_at is null
+    ),
+    hits as (
+      -- 3-day window: due in [69h, 75h] from now (±3h around 72h
+      -- so a single hourly tick still catches every task even
+      -- with scheduler drift).
+      select id, user_id, '3d' as tier
+        from target_times
+        where due_at - now() between interval '69 hours' and interval '75 hours'
+      union all
+      -- 1-day window: [21h, 27h] around 24h.
+      select id, user_id, '1d' as tier
+        from target_times
+        where due_at - now() between interval '21 hours' and interval '27 hours'
+      union all
+      -- 1-hour window: only when due_time is set (we can't pin
+      -- a 1h reminder to a date-only task). [55min, 65min] around
+      -- 60min.
+      select id, user_id, '1h' as tier
+        from target_times
+        where due_time is not null
+          and due_at - now() between interval '55 minutes' and interval '65 minutes'
+    )
+    insert into notification_log (task_id, user_id, tier)
+      select h.id, h.user_id, h.tier from hits h
+      on conflict (task_id, tier) do nothing;
+
+    -- Fire the Edge Function. pg_net.http_post is async — the
+    -- cron doesn't wait for a response, it returns immediately
+    -- and the function runs in the background. The two GUCs
+    -- (`app.send_push_url`, `app.send_push_key`) are set with
+    -- ALTER DATABASE so the URL and shared secret aren't in the
+    -- schema file.
+    do $$
+    declare
+      send_push_url text := nullif(current_setting('app.send_push_url', true), '');
+      send_push_key text := nullif(current_setting('app.send_push_key', true), '');
+    begin
+      if send_push_url is null or send_push_key is null then
+        raise notice 'Skipping send-push call: app.send_push_url or app.send_push_key is not configured';
+      else
+        perform net.http_post(
+          url     := send_push_url,
+          headers := jsonb_build_object(
+            'Content-Type', 'application/json',
+            'Authorization', 'Bearer ' || send_push_key
+          ),
+          body    := '{}'::jsonb
+        );
+      end if;
+    end $$;
+  $cron$
+);

@@ -10,6 +10,7 @@ import { useTheme } from '../hooks/useTheme';
 import { useConfirm } from '../hooks/useConfirm';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useDragAndDrop } from '../hooks/useDragAndDrop';
+import { usePushSubscription } from '../hooks/usePushSubscription';
 import { QUADRANTS } from '../types';
 import type { Quadrant as QuadrantId, Task, Subject, Status } from '../types';
 import { ThemeToggle } from './ThemeToggle';
@@ -21,6 +22,7 @@ import { Calendar } from './Calendar';
 import { DoneList } from './DoneList';
 import { StatusDetail } from './StatusDetail';
 import { Visualizer3D } from './Visualizer3D';
+import { InstallPrompt } from './InstallPrompt';
 import './Dashboard.css';
 
 type View = 'dashboard' | 'matrix' | 'calendar' | 'completed';
@@ -272,6 +274,7 @@ export function Dashboard({
     >
       {isMobile !== true && (
         <DashboardSidebar
+          userId={userId}
           view={view}
           onChangeView={setView}
           activeCount={activeCount}
@@ -282,6 +285,7 @@ export function Dashboard({
           userEmail={userEmail}
           onOpenSettings={() => setSettingsOpen(true)}
           onSignOut={handleSignOut}
+          onReminderError={showError}
         />
       )}
 
@@ -306,6 +310,11 @@ export function Dashboard({
             {dashboardError}
           </p>
         )}
+
+        {/* iOS-only banner: tells the user to install the PWA
+            before reminders can fire. Self-mounts based on UA, so
+            it returns null on every other platform. */}
+        <InstallPrompt />
 
         {isAnonymous && (
           <div className="dashboard-guest-banner" role="status">
@@ -483,6 +492,7 @@ function DashboardHeader({
 }
 
 interface DashboardSidebarProps {
+  userId: string;
   view: View;
   onChangeView: (v: View) => void;
   activeCount: number;
@@ -493,9 +503,11 @@ interface DashboardSidebarProps {
   userEmail: string | null;
   onOpenSettings: () => void;
   onSignOut: () => void;
+  onReminderError: (message: string) => void;
 }
 
 function DashboardSidebar({
+  userId,
   view,
   onChangeView,
   activeCount,
@@ -506,6 +518,7 @@ function DashboardSidebar({
   userEmail,
   onOpenSettings,
   onSignOut,
+  onReminderError,
 }: DashboardSidebarProps) {
   const { theme, toggle: toggleTheme } = useTheme();
   return (
@@ -593,6 +606,8 @@ function DashboardSidebar({
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
           </button>
+
+          <ReminderActionButton userId={userId} onError={onReminderError} />
           
           <button
             type="button"
@@ -610,6 +625,61 @@ function DashboardSidebar({
         </div>
       </div>
     </aside>
+  );
+}
+
+interface ReminderActionButtonProps {
+  userId: string;
+  onError: (message: string) => void;
+}
+
+function ReminderActionButton({ userId, onError }: ReminderActionButtonProps) {
+  const { state, error, subscribe, unsubscribe } = usePushSubscription(userId);
+  const [busy, setBusy] = useState(false);
+  const isOn = state === 'subscribed';
+
+  async function handleClick() {
+    if (busy) return;
+    if (state === 'unsupported') {
+      onError("Reminders aren't supported in this browser.");
+      return;
+    }
+    if (state === 'unsupported-mobile') {
+      onError('Install Kurhona to your home screen, then open it from the app icon to enable reminders.');
+      return;
+    }
+    if (state === 'denied') {
+      onError('Notifications are blocked for Kurhona. Enable them in your browser settings to receive reminders.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const ok = isOn ? await unsubscribe() : await subscribe();
+      if (!ok) {
+        onError(error ?? "Couldn't update reminders. Check notification permission and try again.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const label = isOn ? 'Turn off reminders' : 'Turn on reminders';
+
+  return (
+    <button
+      type="button"
+      className={`sidebar-action-btn reminder-action-btn${isOn ? ' is-active' : ''}`}
+      onClick={handleClick}
+      title={label}
+      aria-label={label}
+      aria-pressed={isOn}
+      disabled={busy}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9" />
+        <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+      </svg>
+    </button>
   );
 }
 

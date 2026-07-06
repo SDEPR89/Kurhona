@@ -27,5 +27,11 @@ dist-ssr
 .env
 .env.*
 !.env.example
+!.env.test.example
 .vercel
-.env*
+supabase/.temp/
+
+# Scratch design assets and stray images at the repo root.
+# (Keep these local; don't ship with the repo.)
+Idea/
+circle.jpg

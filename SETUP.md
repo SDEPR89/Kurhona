@@ -123,6 +123,108 @@ drop table if exists subjects cascade;
 ```
 then re-run `schema.sql`.
 
+## 8.5. Reminders (push notifications)
+
+Optional. Skip this section if you don't need due-date push notifications —
+the rest of the app works without it.
+
+Reminders fire **3 days, 1 day, and (only when a due time is set) 1 hour**
+before a task is due. They use Web Push, which works on every desktop
+browser and on iOS Safari only when the user installs the PWA via **Share →
+Add to Home Screen**. See `src/components/InstallPrompt.tsx` for the
+in-app hint that surfaces on iOS.
+
+### 1. Generate VAPID keys
+
+A one-time step. The VAPID key pair signs every push so the push service
+knows the message is from your app.
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+You'll get back something like:
+
+```
+Public Key:  BNc...xyz
+Private Key: abC...uvW
+```
+
+### 2. Store the secrets
+
+**Supabase project secrets** (Settings → Edge Functions → Secrets, or `npx
+supabase secrets set`):
+
+- `VAPID_PUBLIC_KEY` — the public key from step 1
+- `VAPID_PRIVATE_KEY` — the private key from step 1
+- `VAPID_SUBJECT` — either `mailto:you@yourdomain.com` or `https://yourdomain.com`. The Edge Function prepends `mailto:` if you give a bare email.
+- `SHARED_CRON_SECRET` — generate with `openssl rand -hex 32`. The cron job and Edge Function both check this.
+
+**Frontend env vars** (in `.env` for local, in Vercel env for production):
+
+- `VITE_VAPID_PUBLIC_KEY` — same public key as above. The browser needs it to subscribe.
+
+### 3. Set the database GUCs
+
+The cron body reads the function URL and shared secret from Postgres
+custom settings so neither is hardcoded in `schema.sql`. Run once as a
+superuser (Supabase SQL Editor with the `postgres` role):
+
+```sql
+ALTER DATABASE postgres SET app.send_push_url =
+  'https://<your-project-ref>.supabase.co/functions/v1/send-push';
+ALTER DATABASE postgres SET app.send_push_key = '<SHARED_CRON_SECRET>';
+```
+
+### 4. Enable the pg_cron and pg_net extensions
+
+In the Supabase dashboard: **Database → Extensions** → enable both. They
+need to be on for the cron schedule and HTTP call to work.
+
+### 5. Run the schema
+
+The new SQL is appended to `supabase/schema.sql` (the two new tables,
+the RLS policies, the pg_cron schedule, and the `pg_net` HTTP call). Run
+the whole file in the SQL Editor. The `create extension` lines and the
+`cron.unschedule`/`cron.schedule` block are no-ops on a re-run.
+
+### 6. Deploy the Edge Function
+
+```bash
+npx supabase functions deploy send-push --no-verify-jwt
+```
+
+The `--no-verify-jwt` flag disables Supabase's built-in JWT check
+because the function does its own bearer-token check against
+`SHARED_CRON_SECRET`. Make sure the secret is set (step 2) before
+deploying, or every invocation will return 500.
+
+### 7. Test it locally
+
+The pg_cron job only runs in the production database (Supabase doesn't
+expose it on local Docker). To exercise the Edge Function from your
+machine, POST directly:
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $SHARED_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{}' \
+  https://<your-project-ref>.supabase.co/functions/v1/send-push
+```
+
+It should return `200 ok sent=0 dead=0` (no queued reminders yet). To
+simulate one, insert a row directly into `notification_log` and re-run
+the curl.
+
+### 8. Drop in real PWA icons (before launch)
+
+`public/manifest.json` currently points at `public/logo.png` and
+`public/favicon.png` as placeholder icons. Before shipping, add real
+sized icons at `public/icon-192.png` and `public/icon-512.png` and
+update the manifest to reference them. iOS will also use
+`apple-touch-icon` (currently `logo.png`).
+
 ## 9. Going to production
 
 Before deploying:

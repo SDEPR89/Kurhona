@@ -5,6 +5,18 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kurhona</title>
+
+    <!-- PWA shell: makes the site installable and lets the OS
+         treat it like a native app once added to the home screen.
+         iOS in particular requires apple-mobile-web-app-capable
+         for the Add-to-Home-Screen flow to render a real app icon
+         and hide Safari chrome. -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Kurhona" />
+    <link rel="apple-touch-icon" href="/logo.png" />
   </head>
   <body>
     <div id="root"></div>

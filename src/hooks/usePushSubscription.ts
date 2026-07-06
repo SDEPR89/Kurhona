@@ -22,8 +22,8 @@ export type PushState =
 interface UsePushSubscriptionResult {
   state: PushState;
   error: string | null;
-  subscribe: () => Promise<boolean>;
-  unsubscribe: () => Promise<boolean>;
+  subscribe: () => Promise<{ ok: boolean; error?: string }>;
+  unsubscribe: () => Promise<{ ok: boolean; error?: string }>;
 }
 
 // Detect iOS Safari tab (push only works when installed). Other mobile
@@ -113,29 +113,30 @@ export function usePushSubscription(userId: string | null): UsePushSubscriptionR
     void probeExisting();
   }, [userId, probeExisting]);
 
-  const subscribe = useCallback(async (): Promise<boolean> => {
+  const subscribe = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
     setError(null);
     if (!userId) {
       // Caller passed a null user — we don't subscribe anonymous
       // accounts (their data is local-only).
       setState('prompt');
-      return false;
+      return { ok: false, error: 'Sign in before enabling reminders.' };
     }
     const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
     if (!vapidKey) {
-      setError('VAPID public key not configured.');
+      const message = 'VAPID public key not configured.';
+      setError(message);
       setState('error');
-      return false;
+      return { ok: false, error: message };
     }
     try {
       const perm = await Notification.requestPermission();
       if (perm === 'denied') {
         setState('denied');
-        return false;
+        return { ok: false, error: 'Notifications are blocked for Kurhona.' };
       }
       if (perm !== 'granted') {
         setState('prompt');
-        return false;
+        return { ok: false, error: 'Notification permission was not granted.' };
       }
       const reg = await navigator.serviceWorker.register('/sw.js');
       // Wait for the SW to be active (or already active). Without
@@ -151,15 +152,16 @@ export function usePushSubscription(userId: string | null): UsePushSubscriptionR
       }
       await persistSubscription(sub, userId);
       setState('subscribed');
-      return true;
+      return { ok: true };
     } catch (e) {
-      setError((e as Error).message);
+      const message = (e as Error).message;
+      setError(message);
       setState('error');
-      return false;
+      return { ok: false, error: message };
     }
   }, [userId]);
 
-  const unsubscribe = useCallback(async (): Promise<boolean> => {
+  const unsubscribe = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
     setError(null);
     try {
       const reg = await navigator.serviceWorker.ready;
@@ -169,11 +171,12 @@ export function usePushSubscription(userId: string | null): UsePushSubscriptionR
         await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
       }
       setState('prompt');
-      return true;
+      return { ok: true };
     } catch (e) {
-      setError((e as Error).message);
+      const message = (e as Error).message;
+      setError(message);
       setState('error');
-      return false;
+      return { ok: false, error: message };
     }
   }, []);
 

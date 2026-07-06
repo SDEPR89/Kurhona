@@ -654,9 +654,9 @@ function ReminderActionButton({ userId, onError }: ReminderActionButtonProps) {
     }
     setBusy(true);
     try {
-      const ok = isOn ? await unsubscribe() : await subscribe();
-      if (!ok) {
-        onError(error ?? "Couldn't update reminders. Check notification permission and try again.");
+      const result = isOn ? await unsubscribe() : await subscribe();
+      if (!result.ok) {
+        onError(result.error ?? error ?? "Couldn't update reminders. Check notification permission and try again.");
       }
     } finally {
       setBusy(false);

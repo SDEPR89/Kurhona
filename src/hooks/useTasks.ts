@@ -328,6 +328,11 @@ export function useTasks(userId: string | null, options: UseTasksOptions = {}) {
   // consistent with what the user saw during the drag, then mirror
   // the same change into `setTasks` so the canonical array stays in
   // sync (the realtime echoes that follow the RPC will be no-ops).
+  // Initialize the ref to the current `liveTasks` value so the very
+  // first call to `reorder` (or `snapshotLiveTasks`) reads the right
+  // value, not the previous render's value. A useRef seeded with the
+  // initial state value gives us this for free; the effect below then
+  // keeps the ref in sync on every subsequent change.
   const liveTasksRef = useRef<Task[]>(liveTasks);
   useEffect(() => {
     liveTasksRef.current = liveTasks;

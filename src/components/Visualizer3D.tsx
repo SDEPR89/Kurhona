@@ -124,10 +124,6 @@ export function Visualizer3D({
     return () => observer.disconnect();
   }, []);
 
-  // Stable ref the button can call to reset the camera. Lives on a
-  // ref (not `window.resetVisCamera`) so it can't be undefined in
-  // the gap between effect cleanup and re-assignment when `tasks`
-  // changes mid-click.
   // Compute stats for HUD overlay
   const stats = {
     total: tasks.length,
@@ -185,6 +181,19 @@ export function Visualizer3D({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    // Capture the loop's source of truth for screen-space projections.
+    // The animation loop runs many frames per second and the tooltip /
+    // HUD positioning reads these on every tick; reading
+    // `containerRef.current.clientWidth/Height` directly is fine but
+    // it means the loop has two ways to know the container size. The
+    // effect's `size` state is already the canonical source (it
+    // drives the camera and the renderer), so capture it once here
+    // and reuse it in the loop. If the container resizes, the effect
+    // re-runs with a new `size` and a new closure — the old loop is
+    // cancelled in cleanup, so no race.
+    const widthHalf = size.w / 2;
+    const heightHalf = size.h / 2;
 
     // 4. Orbit Controls
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -651,15 +660,12 @@ export function Visualizer3D({
         }
 
         // Project 3D node center to 2D screen space to position HTML tooltip
-        if (hoveredMesh && containerRef.current) {
+        if (hoveredMesh) {
           const nodeWorldPos = new THREE.Vector3();
           hoveredMesh.getWorldPosition(nodeWorldPos);
 
           const vector = nodeWorldPos.clone();
           vector.project(camera);
-
-          const widthHalf = containerRef.current.clientWidth / 2;
-          const heightHalf = containerRef.current.clientHeight / 2;
 
           const screenX = vector.x * widthHalf + widthHalf;
           const screenY = -vector.y * heightHalf + heightHalf;
@@ -676,21 +682,18 @@ export function Visualizer3D({
       }
 
       // Project central sphere (0, 0.5, 0) to 2D screen space to position HTML percentage overlay
-      if (percentageHudRef.current && containerRef.current) {
+      if (percentageHudRef.current) {
         const centerPos = new THREE.Vector3(0, 0.5, 0);
         centerPos.project(camera);
 
         // Hide if behind the camera
         const isBehind = centerPos.z > 1.0;
-        
+
         if (isBehind) {
           percentageHudRef.current.style.opacity = '0';
         } else {
           percentageHudRef.current.style.opacity = '1';
-          
-          const widthHalf = containerRef.current.clientWidth / 2;
-          const heightHalf = containerRef.current.clientHeight / 2;
-          
+
           const screenX = centerPos.x * widthHalf + widthHalf;
           const screenY = -centerPos.y * heightHalf + heightHalf;
           

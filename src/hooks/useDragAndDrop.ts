@@ -138,7 +138,7 @@ export function useDragAndDrop(inputs: UseDragAndDropInputs): UseDragAndDropResu
       eliminate: [],
     };
     for (const t of liveTasks) {
-      if (!t.completed_at) groups[t.quadrant].push(t);
+      if (!t.completed_at && (t.task_type ?? 'homework') === 'homework') groups[t.quadrant].push(t);
     }
     for (const q of Object.keys(groups) as Quadrant[]) {
       groups[q].sort(taskSort);

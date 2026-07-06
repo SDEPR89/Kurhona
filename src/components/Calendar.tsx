@@ -167,32 +167,29 @@ function TaskDot({ task, onClick }: TaskDotProps) {
     ...(attributes as { style?: React.CSSProperties }).style,
   };
 
+  const dotClass = task.task_type === 'test'
+    ? 'calendar-task-dot--test'
+    : `calendar-task-dot--${(task.quadrant as Quadrant).replace('_', '-')}`;
+
+  const dotLabel = task.task_type === 'test'
+    ? 'test'
+    : task.quadrant.replace('_', ' ');
+
   return (
     <span className="calendar-task-dot-wrap">
       <button
         ref={setNodeRef}
         type="button"
-        // The DB enum is `do_first` (snake_case) but Calendar.css's
-        // modifier classes use kebab-case (`.calendar-task-dot--do-first`).
-        // Replace the underscore so the class matches — without this,
-        // do_first dots fall through to the transparent default and
-        // render as the empty cell background (looks black-and-white
-        // against the dim cell).
-        className={`calendar-task-dot calendar-task-dot--${(task.quadrant as Quadrant).replace('_', '-')}`}
+        className={`calendar-task-dot ${dotClass}`}
         style={style}
-        aria-label={`${task.title} (${task.quadrant})`}
+        aria-label={`${task.title} (${dotLabel})`}
         onClick={handleClick}
         {...listeners}
         {...attributes}
       />
-      {/* CSS-only hover tooltip — shows the task title and quadrant.
-          Native `title` attribute is intentionally not used because the
-          1s OS-default delay and look are inconsistent across browsers. */}
       <span className="calendar-task-dot-tooltip" role="tooltip">
         <span className="calendar-task-dot-tooltip-title">{task.title}</span>
-        <span className="calendar-task-dot-tooltip-meta">
-          {task.quadrant.replace('_', ' ')}
-        </span>
+        <span className="calendar-task-dot-tooltip-meta">{dotLabel}</span>
       </span>
     </span>
   );

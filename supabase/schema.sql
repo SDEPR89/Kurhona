@@ -255,6 +255,18 @@ revoke all on function public.delete_own_account() from public;
 grant execute on function public.delete_own_account() to authenticated;
 
 -- ---------------------------------------------------------------------------
+-- Task type: 'homework' (default, the Eisenhower matrix tasks) or 'test'
+-- (exam / test tasks shown in the separate Tests tab). Stored as text so
+-- new values can be added without a migration. Null rows (pre-dating the
+-- column) are treated as 'homework' by the client.
+-- ---------------------------------------------------------------------------
+alter table tasks add column if not exists task_type text not null default 'homework';
+alter table tasks drop constraint if exists tasks_task_type_check;
+alter table tasks
+  add constraint tasks_task_type_check
+  check (task_type in ('homework', 'test'));
+
+-- ---------------------------------------------------------------------------
 -- Manual drag-and-drop order within a quadrant. Null = sort by
 -- created_at desc (the prior default). Sparse per (user, quadrant) —
 -- any gap between two rows means a card was just created and hasn't
@@ -375,6 +387,30 @@ create table if not exists push_subscriptions (
   user_agent  text,
   created_at  timestamptz not null default now()
 );
+-- Repair older/partial installs where the table already existed before
+-- Web Push needed the endpoint encryption keys.
+alter table push_subscriptions
+  add column if not exists endpoint text,
+  add column if not exists p256dh text,
+  add column if not exists auth text,
+  add column if not exists user_agent text,
+  add column if not exists created_at timestamptz not null default now();
+do $$
+begin
+  -- Legacy/partial reminder installs used auth_key. The current Web Push
+  -- sender reads auth, so auth_key must not block new subscriptions.
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'push_subscriptions'
+      and column_name = 'auth_key'
+  ) then
+    alter table push_subscriptions alter column auth_key drop not null;
+  end if;
+end $$;
+create unique index if not exists push_subscriptions_endpoint_key
+  on push_subscriptions (endpoint);
 alter table push_subscriptions enable row level security;
 drop policy if exists "push_subscriptions: own rows" on push_subscriptions;
 create policy "push_subscriptions: own rows" on push_subscriptions

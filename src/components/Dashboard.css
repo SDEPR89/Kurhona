@@ -2589,3 +2589,308 @@ button.task-status-dot.status-dot--submitted::before {
 .dashboard-mobile-container .dashboard-view[key="completed"] {
   padding: 16px;
 }
+
+/* ---------- Tests view ----------
+   Violet accent. Single glass panel — header / divider / section
+   pattern matching the design reference.
+   ------------------------------------------------------------------ */
+
+/* Scoped violet tokens */
+.tests-view {
+  --tv:        #a78bfa;
+  --tv-dim:    #8b5cf6;
+  --tv-bg:     rgba(139, 92, 246, 0.10);
+  --tv-border: rgba(139, 92, 246, 0.35);
+}
+
+.tests-view {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  color: var(--fg);
+}
+
+.tests-view--enter {
+  animation: quadrant-rise .55s cubic-bezier(.2, .8, .2, 1) both;
+}
+
+/* ── Single containing panel ── */
+.tests-panel {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
+  transition: background .35s, border-color .35s;
+}
+
+/* Violet top accent line on the panel */
+.tests-panel::before {
+  content: "";
+  display: block;
+  height: 2px;
+  background: linear-gradient(90deg, var(--tv-dim) 0%, var(--tv) 50%, var(--tv-dim) 100%);
+}
+
+/* ── Panel header ── */
+.tests-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px;
+}
+
+.tests-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.tests-icon-badge {
+  flex-shrink: 0;
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  background: var(--tv-bg);
+  border: 1px solid var(--tv-border);
+  display: grid;
+  place-items: center;
+  color: var(--tv);
+}
+
+:root[data-theme='light'] .tests-icon-badge {
+  background: rgba(139, 92, 246, 0.08);
+  color: var(--tv-dim);
+}
+
+.tests-panel-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--fg);
+  line-height: 1.3;
+  transition: color .35s ease;
+}
+
+.tests-panel-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--fg-muted);
+  transition: color .35s ease;
+}
+
+/* Outlined violet "Add test" button */
+.tests-btn-add {
+  flex-shrink: 0;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid var(--tv-border);
+  border-radius: 8px;
+  color: var(--tv);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s ease, border-color .15s ease;
+}
+
+.tests-btn-add:hover {
+  background: var(--tv-bg);
+  border-color: var(--tv);
+}
+
+/* ── Divider ── */
+.tests-divider {
+  height: 1px;
+  background: var(--glass-border);
+}
+
+/* ── Sections (Upcoming / Completed) ── */
+.tests-section {
+  padding: 20px 22px;
+}
+
+.tests-section--done {
+  opacity: 0.72;
+}
+
+.tests-section-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 20px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: .06em;
+  transition: color .35s ease;
+}
+
+.tests-count-pill {
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  color: var(--fg-faint);
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  transition: background .35s, color .35s, border-color .35s;
+}
+
+/* ── Task list ── */
+.tests-task-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tests-task-list--done .task-card {
+  opacity: 0.75;
+}
+
+/* Card row: badge + task card */
+.tests-card-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tests-card-row .task-card {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Countdown badges ── */
+.tests-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  border-radius: 6px;
+  padding: 3px 7px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  min-width: 52px;
+  text-align: center;
+}
+
+.tests-badge--today {
+  background: color-mix(in srgb, #ef4444 16%, transparent);
+  border-color: color-mix(in srgb, #ef4444 40%, transparent);
+  color: #f87171;
+}
+:root[data-theme='light'] .tests-badge--today {
+  color: #b91c1c;
+  background: color-mix(in srgb, #ef4444 10%, transparent);
+}
+
+.tests-badge--soon {
+  background: color-mix(in srgb, #f59e0b 16%, transparent);
+  border-color: color-mix(in srgb, #f59e0b 40%, transparent);
+  color: #fbbf24;
+}
+:root[data-theme='light'] .tests-badge--soon {
+  color: #b45309;
+  background: color-mix(in srgb, #f59e0b 10%, transparent);
+}
+
+.tests-badge--week {
+  background: color-mix(in srgb, var(--tv) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tv) 38%, transparent);
+  color: var(--tv);
+}
+:root[data-theme='light'] .tests-badge--week {
+  color: var(--tv-dim);
+}
+
+.tests-badge--far {
+  background: var(--glass-bg-strong);
+  border-color: var(--glass-border);
+  color: var(--fg-faint);
+}
+
+.tests-badge--past {
+  background: var(--glass-bg-soft);
+  border-color: var(--glass-border);
+  color: var(--fg-fainter);
+}
+
+/* ── Empty state ── */
+.tests-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 28px 16px 16px;
+  gap: 6px;
+}
+
+.tests-empty-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: var(--tv-bg);
+  border: 1px solid var(--tv-border);
+  display: grid;
+  place-items: center;
+  color: var(--tv);
+  margin-bottom: 10px;
+}
+
+:root[data-theme='light'] .tests-empty-icon {
+  color: var(--tv-dim);
+}
+
+.tests-empty-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.tests-empty-body {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .tests-panel-header {
+    flex-wrap: wrap;
+  }
+
+  .tests-btn-add {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .tests-card-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}
+
+@media (max-width: 480px) {
+  .tests-panel-header,
+  .tests-section {
+    padding: 16px;
+  }
+}

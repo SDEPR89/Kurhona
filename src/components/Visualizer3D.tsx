@@ -34,6 +34,7 @@ function resolveColor(colorStr: string | null | undefined, fallback: string): st
 
 interface Visualizer3DProps {
   tasks: Task[];
+  testTasks: Task[];
   subjects: Subject[];
   onEdit: (task: Task) => void;
   completionPercentage: number;
@@ -46,10 +47,12 @@ const RING_CONFIGS = {
   schedule: { radius: 5.5, color: '#60a5fa', label: 'Schedule' },
   delegate: { radius: 7.5, color: '#fbbf24', label: 'Delegate' },
   eliminate: { radius: 9.5, color: '#9ca3af', label: 'Eliminate' },
+  test:      { radius: 11.5, color: '#a78bfa', label: 'Tests' },
 } as const;
 
 export function Visualizer3D({
   tasks,
+  testTasks,
   subjects,
   onEdit,
   completionPercentage,
@@ -131,6 +134,7 @@ export function Visualizer3D({
     schedule: tasks.filter(t => t.quadrant === 'schedule').length,
     delegate: tasks.filter(t => t.quadrant === 'delegate').length,
     eliminate: tasks.filter(t => t.quadrant === 'eliminate').length,
+    test: testTasks.length,
   };
 
   useEffect(() => {
@@ -297,7 +301,7 @@ export function Visualizer3D({
     interface TaskNode {
       task: Task;
       mesh: THREE.Mesh;
-      quadrant: 'do_first' | 'schedule' | 'delegate' | 'eliminate';
+      quadrant: 'do_first' | 'schedule' | 'delegate' | 'eliminate' | 'test';
       baseTheta: number;
       speed: number;
       yFloatOffset: number;
@@ -315,6 +319,7 @@ export function Visualizer3D({
       schedule: [],
       delegate: [],
       eliminate: [],
+      test: [...testTasks],
     };
 
     tasks.forEach((t) => {
@@ -363,7 +368,7 @@ export function Visualizer3D({
         taskNodes.push({
           task,
           mesh: sphereMesh,
-          quadrant: quadrantKey as 'do_first' | 'schedule' | 'delegate' | 'eliminate',
+          quadrant: quadrantKey as 'do_first' | 'schedule' | 'delegate' | 'eliminate' | 'test',
           baseTheta,
           speed: randomSpeed,
           yFloatOffset: randomOffset,
@@ -769,7 +774,7 @@ export function Visualizer3D({
 
       renderer.dispose();
     };
-  }, [tasks, subjects, onEdit, completionPercentage, size]);
+  }, [tasks, testTasks, subjects, onEdit, completionPercentage, size]);
 
   // Find subject details for the tooltip
   const hoveredTaskSubject = hoveredTask?.subject_id
@@ -807,6 +812,11 @@ export function Visualizer3D({
           <span className="hud-ring-label">{RING_CONFIGS.eliminate.label}</span>
           <span className="hud-ring-count">{stats.eliminate}</span>
         </div>
+        <div className="hud-ring-item">
+          <div className="hud-ring-color" style={{ color: '#a78bfa', backgroundColor: '#a78bfa' }} />
+          <span className="hud-ring-label">{RING_CONFIGS.test.label}</span>
+          <span className="hud-ring-count">{stats.test}</span>
+        </div>
         <div className="hud-ring-item" style={{ borderTop: '1px solid var(--divider)', paddingTop: '8px', marginTop: '8px' }}>
           <div className="hud-ring-color" style={{ color: '#1ba39c', backgroundColor: '#1ba39c', boxShadow: '0 0 10px #1ba39c' }} />
           <span className="hud-ring-label" style={{ fontWeight: '600' }}>Done Progress</span>
@@ -824,7 +834,7 @@ export function Visualizer3D({
             <div className="tooltip-title">{hoveredTask.title}</div>
             <div className="tooltip-meta">
               <span className="tooltip-badge">
-                {hoveredTask.quadrant.replace('_', ' ')}
+                {hoveredTask.task_type === 'test' ? 'test' : hoveredTask.quadrant.replace('_', ' ')}
               </span>
               <span className="tooltip-badge">
                 {hoveredTask.status.replace('_', ' ')}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Subject, Task, Quadrant, Status } from '../types';
+import type { Subject, Task, Quadrant, Status, TaskType } from '../types';
 import { QUADRANTS, STATUSES } from '../types';
 import { SubjectManager } from './SubjectManager';
 import { SubjectSelect } from './SubjectSelect';
@@ -21,6 +21,7 @@ interface Props {
     due_time: string | null;
     quadrant: Quadrant;
     status: Status;
+    task_type: TaskType;
   }) => Promise<boolean>;
   onDelete?: () => void;
   // Hook-level predicate: passed straight through to SubjectSelect
@@ -52,6 +53,9 @@ export function TaskModal({
   );
   const [quadrant, setQuadrant] = useState<Quadrant>(initial.quadrant);
   const [status, setStatus] = useState<Status>(initial.status ?? 'not_started');
+  // task_type is read-only after the modal opens — it is set at
+  // creation time and never changed inside the modal.
+  const [taskType] = useState<TaskType>(initial.task_type ?? 'homework');
   const [addingSubject, setAddingSubject] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -103,6 +107,7 @@ export function TaskModal({
       due_time: dueTime || null,
       quadrant,
       status,
+      task_type: taskType,
     });
     if (!ok) {
       setError("Couldn't save the task. Please try again.");
@@ -124,7 +129,11 @@ export function TaskModal({
     >
       <div className="modal">
         <header className="modal-header">
-          <h2 id="task-modal-title">{mode === 'create' ? 'New task' : 'Edit task'}</h2>
+          <h2 id="task-modal-title">
+            {mode === 'create'
+              ? taskType === 'test' ? 'New test' : 'New task'
+              : taskType === 'test' ? 'Edit test' : 'Edit task'}
+          </h2>
           <button
             type="button"
             className="modal-close"
@@ -203,22 +212,24 @@ export function TaskModal({
             </div>
 
             <div className="form-row">
-              <div className="field">
-                <label htmlFor="task-quadrant">Quadrant</label>
-                <select
-                  id="task-quadrant"
-                  className="input"
-                  value={quadrant}
-                  onChange={(e) => setQuadrant(e.target.value as Quadrant)}
-                  disabled={busy}
-                >
-                  {QUADRANTS.map((q) => (
-                    <option key={q.id} value={q.id}>
-                      {q.order}. {q.title} — {q.subtitle}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {taskType !== 'test' && (
+                <div className="field">
+                  <label htmlFor="task-quadrant">Quadrant</label>
+                  <select
+                    id="task-quadrant"
+                    className="input"
+                    value={quadrant}
+                    onChange={(e) => setQuadrant(e.target.value as Quadrant)}
+                    disabled={busy}
+                  >
+                    {QUADRANTS.map((q) => (
+                      <option key={q.id} value={q.id}>
+                        {q.order}. {q.title} — {q.subtitle}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="field">
                 <label htmlFor="task-status">Status</label>
@@ -276,7 +287,7 @@ export function TaskModal({
                   Cancel
                 </button>
                 <button type="submit" className="btn-primary" disabled={busy}>
-                  {busy ? 'Saving…' : mode === 'create' ? 'Add task' : 'Save changes'}
+                  {busy ? 'Saving…' : mode === 'create' ? (taskType === 'test' ? 'Add test' : 'Add task') : 'Save changes'}
                 </button>
               </div>
             </footer>

@@ -23,6 +23,26 @@ create table if not exists push_subscriptions (
   user_agent  text,
   created_at  timestamptz not null default now()
 );
+alter table push_subscriptions
+  add column if not exists endpoint text,
+  add column if not exists p256dh text,
+  add column if not exists auth text,
+  add column if not exists user_agent text,
+  add column if not exists created_at timestamptz not null default now();
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'push_subscriptions'
+      and column_name = 'auth_key'
+  ) then
+    alter table push_subscriptions alter column auth_key drop not null;
+  end if;
+end $$;
+create unique index if not exists push_subscriptions_endpoint_key
+  on push_subscriptions (endpoint);
 alter table push_subscriptions enable row level security;
 drop policy if exists "push_subscriptions: own rows" on push_subscriptions;
 create policy "push_subscriptions: own rows" on push_subscriptions

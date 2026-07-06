@@ -184,6 +184,7 @@
 .calendar-task-dot--schedule  { background-color: var(--q-schedule,  #3b82f6); }
 .calendar-task-dot--delegate  { background-color: var(--q-delegate,  #f59e0b); }
 .calendar-task-dot--eliminate { background-color: var(--q-eliminate, #6b7280); }
+.calendar-task-dot--test      { background-color: #a78bfa; }
 
 .calendar-task-dot:hover,
 .calendar-task-dot:focus-visible {

@@ -256,7 +256,7 @@ export function useTasks(userId: string | null, options: UseTasksOptions = {}) {
       await runBusy(id, async () => {
         const { error } = await supabase
           .from('tasks')
-          .update({ completed_at: new Date().toISOString() })
+          .update({ completed_at: new Date().toISOString(), status: 'submitted' })
           .eq('id', id);
         if (error) surface("Couldn't update the task status.");
       });
@@ -268,7 +268,7 @@ export function useTasks(userId: string | null, options: UseTasksOptions = {}) {
     await runBusy(id, async () => {
       const { error } = await supabase
         .from('tasks')
-        .update({ completed_at: null })
+        .update({ completed_at: null, status: 'not_started' })
         .eq('id', id);
       if (error) surface("Couldn't update the task status.");
     });

@@ -12,7 +12,7 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useDragAndDrop } from '../hooks/useDragAndDrop';
 import { usePushSubscription } from '../hooks/usePushSubscription';
 import { QUADRANTS } from '../types';
-import type { Quadrant as QuadrantId, Task, Subject, Status } from '../types';
+import type { Quadrant as QuadrantId, Task, Subject, Status, TaskType } from '../types';
 import { ThemeToggle } from './ThemeToggle';
 import { Quadrant } from './Quadrant';
 import { TaskCard } from './TaskCard';
@@ -20,12 +20,13 @@ import { TaskModal } from './TaskModal';
 import { SettingsModal } from './SettingsModal';
 import { Calendar } from './Calendar';
 import { DoneList } from './DoneList';
+import { TestsView } from './TestsView';
 import { StatusDetail } from './StatusDetail';
 import { Visualizer3D } from './Visualizer3D';
 import { InstallPrompt } from './InstallPrompt';
 import './Dashboard.css';
 
-type View = 'dashboard' | 'matrix' | 'calendar' | 'completed';
+type View = 'dashboard' | 'matrix' | 'calendar' | 'completed' | 'tests';
 
 interface Props {
   userId: string;
@@ -92,7 +93,7 @@ export function Dashboard({
 
   const [view, setView] = useState<View>('dashboard');
   const [editing, setEditing] = useState<
-    | { kind: 'create'; quadrant: QuadrantId; dueDate?: string }
+    | { kind: 'create'; quadrant: QuadrantId; dueDate?: string; taskType?: TaskType }
     | { kind: 'edit'; task: Task }
     | null
   >(null);
@@ -122,8 +123,9 @@ export function Dashboard({
   // Active tab: open tasks grouped by quadrant; Done tab: completed
   // tasks sorted by completed_at desc.
   const grouped = useMemo(() => {
-    const active = tasks.filter((t) => !t.completed_at);
-    const done = tasks.filter((t) => !!t.completed_at);
+    const homeworkTasks = tasks.filter((t) => (t.task_type ?? 'homework') === 'homework');
+    const active = homeworkTasks.filter((t) => !t.completed_at);
+    const done = homeworkTasks.filter((t) => !!t.completed_at);
     const groups: Record<QuadrantId, Task[]> = {
       do_first: [],
       schedule: [],
@@ -136,7 +138,25 @@ export function Dashboard({
       const bT = b.completed_at ?? '';
       return bT.localeCompare(aT);
     });
-    return { groups, done: doneSorted };
+
+    // Test/exam tasks. Strict equality is intentional — null rows
+    // (pre-migration) are treated as 'homework' by the DB default,
+    // never as 'test', so no ?? fallback needed here.
+    const testTasks = tasks.filter((t) => t.task_type === 'test');
+    const activeTests = testTasks.filter((t) => !t.completed_at).sort((a, b) => {
+      // Sort by due_date asc (upcoming first), nulls last
+      if (!a.due_date && !b.due_date) return 0;
+      if (!a.due_date) return 1;
+      if (!b.due_date) return -1;
+      return a.due_date.localeCompare(b.due_date);
+    });
+    const doneTests = testTasks.filter((t) => !!t.completed_at).sort((a, b) => {
+      const aT = a.completed_at ?? '';
+      const bT = b.completed_at ?? '';
+      return bT.localeCompare(aT);
+    });
+
+    return { groups, done: doneSorted, activeTests, doneTests };
   }, [tasks]);
 
   const activeCount =
@@ -145,6 +165,7 @@ export function Dashboard({
     grouped.groups.delegate.length +
     grouped.groups.eliminate.length;
   const doneCount = grouped.done.length;
+  const testCount = grouped.activeTests.length;
 
   async function handleSignOut() {
     if (signingOut) return;
@@ -158,8 +179,8 @@ export function Dashboard({
     }
   }
 
-  function handleAdd(quadrant: QuadrantId) {
-    setEditing({ kind: 'create', quadrant });
+  function handleAdd(quadrant: QuadrantId, taskType?: TaskType) {
+    setEditing({ kind: 'create', quadrant, taskType });
   }
 
   function handleAddOnDate(isoDate: string) {
@@ -201,6 +222,7 @@ export function Dashboard({
     due_time: string | null;
     quadrant: QuadrantId;
     status: Status;
+    task_type: TaskType;
   }): Promise<boolean> {
     if (!editing) return false;
     const row =
@@ -260,9 +282,9 @@ export function Dashboard({
     );
   };
 
-  // Calendar's `tasks` prop is the un-filtered active list.
+  // Calendar gets homework + test tasks so test due dates show on the grid.
   const activeTasksForCalendar: Task[] = grouped.groups.do_first
-    .concat(grouped.groups.schedule, grouped.groups.delegate, grouped.groups.eliminate);
+    .concat(grouped.groups.schedule, grouped.groups.delegate, grouped.groups.eliminate, grouped.activeTests);
 
   return (
     <div
@@ -279,6 +301,7 @@ export function Dashboard({
           onChangeView={setView}
           activeCount={activeCount}
           doneCount={doneCount}
+          testCount={testCount}
           isAnonymous={isAnonymous}
           userDisplayUsername={userDisplayUsername}
           userUsername={userUsername}
@@ -349,6 +372,8 @@ export function Dashboard({
           isTaskBusy={isTaskBusy}
           reorderBusy={reorderBusy}
           renderOverlay={renderOverlay}
+          activeTests={grouped.activeTests}
+          doneTests={grouped.doneTests}
           // Mobile only: tap a task's status dot to open the full-page
           // picker. On desktop we pass undefined so the card renders a
           // non-interactive <span> for the dot.
@@ -369,6 +394,7 @@ export function Dashboard({
           mode="create"
           initial={{
             quadrant: editing.quadrant,
+            task_type: editing.taskType ?? 'homework',
             ...(editing.dueDate ? { due_date: editing.dueDate } : {}),
           }}
           subjects={subjects}
@@ -392,6 +418,7 @@ export function Dashboard({
             due_time: editing.task.due_time,
             quadrant: editing.task.quadrant,
             status: editing.task.status,
+            task_type: editing.task.task_type,
           }}
           subjects={subjects}
           onCreateSubject={handleCreateSubject}
@@ -497,6 +524,7 @@ interface DashboardSidebarProps {
   onChangeView: (v: View) => void;
   activeCount: number;
   doneCount: number;
+  testCount: number;
   isAnonymous: boolean;
   userDisplayUsername: string | null;
   userUsername: string | null;
@@ -512,6 +540,7 @@ function DashboardSidebar({
   onChangeView,
   activeCount,
   doneCount,
+  testCount,
   isAnonymous,
   userDisplayUsername,
   userUsername,
@@ -555,6 +584,19 @@ function DashboardSidebar({
           </svg>
           <span>Tasks</span>
           <span className="sidebar-count">{activeCount}</span>
+        </button>
+
+        <button
+          type="button"
+          className={`sidebar-link${view === 'tests' ? ' is-active' : ''}`}
+          onClick={() => onChangeView('tests')}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg>
+          <span>Tests</span>
+          {testCount > 0 && <span className="sidebar-count">{testCount}</span>}
         </button>
 
         <button
@@ -747,6 +789,18 @@ function DashboardMobileTabbar({ view, onChangeView, onOpenSettings }: Dashboard
 
       <button
         type="button"
+        className={`mobile-tab${view === 'tests' ? ' is-active' : ''}`}
+        onClick={() => onChangeView('tests')}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M9 11l3 3L22 4" />
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+        </svg>
+        <span>Tests</span>
+      </button>
+
+      <button
+        type="button"
         className="mobile-tab mobile-tab--settings"
         onClick={onOpenSettings}
         aria-label="Open settings"
@@ -764,12 +818,12 @@ function DashboardMobileTabbar({ view, onChangeView, onOpenSettings }: Dashboard
 interface DashboardViewProps {
   view: View;
   dnd: ReturnType<typeof useDragAndDrop>;
-  grouped: { groups: Record<QuadrantId, Task[]>; done: Task[] };
+  grouped: { groups: Record<QuadrantId, Task[]>; done: Task[]; activeTests: Task[]; doneTests: Task[] };
   liveGroups: Record<QuadrantId, Task[]>;
   activeTasksForCalendar: Task[];
   loading: boolean;
   subjects: Subject[];
-  onAdd: (q: QuadrantId) => void;
+  onAdd: (q: QuadrantId, taskType?: TaskType) => void;
   onAddOnDate: (iso: string) => void;
   onEdit: (t: Task) => void;
   onToggleComplete: (t: Task) => void;
@@ -779,6 +833,8 @@ interface DashboardViewProps {
   renderOverlay: () => React.ReactNode;
   onOpenStatusDetail?: (t: Task) => void;
   activeEditingTaskId: string | null;
+  activeTests: Task[];
+  doneTests: Task[];
 }
 
 function DashboardView(props: DashboardViewProps) {
@@ -800,6 +856,8 @@ function DashboardView(props: DashboardViewProps) {
     renderOverlay,
     onOpenStatusDetail,
     activeEditingTaskId,
+    activeTests,
+    doneTests,
   } = props;
 
   // View branch router
@@ -809,14 +867,39 @@ function DashboardView(props: DashboardViewProps) {
       grouped.groups.schedule.length +
       grouped.groups.delegate.length +
       grouped.groups.eliminate.length;
-    const doneCount = grouped.done.length;
-    const totalCount = activeCount + doneCount;
+
+    // "This week" = Mon 00:00 local time through end of Sunday.
+    // Only tasks completed within the current week count toward the
+    // percentage so it resets naturally every Monday morning.
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0 = Sun
+    const daysSinceMon = (dayOfWeek + 6) % 7;  // Mon=0 … Sun=6
+    const weekStart = new Date(now);
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(now.getDate() - daysSinceMon);
+    const weekStartMs = weekStart.getTime();
+
+    const isThisWeek = (completedAt: string | null) =>
+      !!completedAt && new Date(completedAt).getTime() >= weekStartMs;
+
+    const thisWeekDone = grouped.done.filter(t => isThisWeek(t.completed_at));
+    const thisWeekDoneTests = grouped.doneTests.filter(t => isThisWeek(t.completed_at));
+    const doneCount = thisWeekDone.length + thisWeekDoneTests.length;
+    // Denominator = everything that exists or was completed this week.
+    // Old completed tasks (prior weeks) are excluded so they don't
+    // drag the percentage down at the start of a new week.
+    const totalCount =
+      activeCount +
+      grouped.activeTests.length +
+      thisWeekDone.length +
+      thisWeekDoneTests.length;
     const completionPercentage = totalCount > 0 ? doneCount / totalCount : 0;
 
     return (
       <div className="dashboard-view dashboard-pane dashboard-pane--3d" key="3d">
         <Visualizer3D
-          tasks={activeTasksForCalendar}
+          tasks={activeTasksForCalendar.filter(t => t.task_type !== 'test')}
+          testTasks={grouped.activeTests}
           subjects={subjects}
           onEdit={onEdit}
           completionPercentage={completionPercentage}
@@ -871,6 +954,25 @@ function DashboardView(props: DashboardViewProps) {
             <div className="drag-overlay">{renderOverlay()}</div>
           </DragOverlay>
         </DndContext>
+      </div>
+    );
+  }
+
+  if (view === 'tests') {
+    return (
+      <div className="dashboard-view" key="tests">
+        <TestsView
+          activeTasks={activeTests}
+          doneTasks={doneTests}
+          subjects={subjects}
+          loading={loading}
+          onAdd={() => onAdd('do_first', 'test')}
+          onEdit={onEdit}
+          onToggleComplete={onToggleComplete}
+          onDelete={onDelete}
+          isTaskBusy={isTaskBusy}
+          onOpenStatusDetail={onOpenStatusDetail}
+        />
       </div>
     );
   }

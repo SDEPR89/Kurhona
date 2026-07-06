@@ -2,6 +2,12 @@
 
 export type Quadrant = 'do_first' | 'schedule' | 'delegate' | 'eliminate';
 
+// Distinguishes homework tasks (the Eisenhower matrix) from test/exam
+// tasks (the single-list Tests tab). Mirrors the DB CHECK constraint in
+// supabase/schema.sql. Rows that pre-date the column read back as
+// 'homework' via the DB default.
+export type TaskType = 'homework' | 'test';
+
 // Homework workflow status. `not_started` is the DB default, so any
 // row that pre-dates the status column will read back as `not_started`
 // without an extra migration step. Stored as text (not enum) so new
@@ -34,6 +40,9 @@ export interface Task {
   // 'not_started', so any row that pre-dates the column will read back
   // as 'not_started' automatically.
   status: Status;
+  // Whether this is a homework task (Eisenhower matrix) or a test/exam
+  // task (Tests tab single list). DB default is 'homework'.
+  task_type: TaskType;
   created_at: string;
   updated_at: string;
   // Dense per-(user, quadrant) order set by drag-and-drop. 0..N-1
@@ -58,6 +67,9 @@ export type TaskInsert = {
   // Omit on insert; the DB default 'not_started' is fine. The client
   // can also pass an explicit value to override.
   status?: Status;
+  // 'homework' for the Eisenhower matrix, 'test' for the Tests tab.
+  // Omit on insert to get the DB default 'homework'.
+  task_type?: TaskType;
   // Omit on insert; the row defaults to null and the dashboard treats
   // null as "append to the end" the next time the user drags in this
   // quadrant.

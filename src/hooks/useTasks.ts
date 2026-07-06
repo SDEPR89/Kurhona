@@ -15,7 +15,6 @@ export function useTasks(userId: string | null, options: UseTasksOptions = {}) {
   const { showError } = options;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   // Set of task ids with an in-flight mutation. Components like
   // TaskCard consult `isBusy(id)` to disable the × button and the
   // complete checkbox while an operation is mid-round-trip, preventing
@@ -43,14 +42,11 @@ export function useTasks(userId: string | null, options: UseTasksOptions = {}) {
   // renders via a ref because we never want it to drive a re-render.
   const liveTasksSnapshotRef = useRef<Task[] | null>(null);
 
-  // Stable wrapper that records to BOTH the banner state (for the
-  // load-error case) and the toast (for write failures). The banner is
-  // intentionally kept for backward compatibility — see the dashboard
-  // .dashboard-error usage — even though it only reliably shows for
-  // load errors.
+  // The single error surface. Calls the injected `showError` (which
+  // in Dashboard sets a local `dashboardError` state) — there is no
+  // internal `error` state to keep in sync.
   const surface = useCallback(
     (message: string) => {
-      setError(message);
       showError?.(message);
     },
     [showError],
@@ -141,7 +137,6 @@ export function useTasks(userId: string | null, options: UseTasksOptions = {}) {
 
     async function load() {
       setLoading(true);
-      setError(null);
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
@@ -458,7 +453,6 @@ export function useTasks(userId: string | null, options: UseTasksOptions = {}) {
   return {
     tasks,
     loading,
-    error,
     liveTasks,
     setLiveTasks,
     snapshotLiveTasks,

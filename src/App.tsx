@@ -5,7 +5,6 @@ import { Dashboard } from './components/Dashboard';
 import { ResetPassword } from './components/ResetPassword';
 import { ConfirmingPage } from './components/ConfirmingPage';
 import { ConfirmProvider } from './hooks/useConfirm';
-import { useToast } from './hooks/useToast';
 import './App.css';
 
 // True when the current URL carries a Supabase recovery token. Supabase puts
@@ -83,7 +82,13 @@ export default function App() {
   // True if the confirming flow runs longer than the timeout. Drives
   // the error state in <ConfirmingPage>.
   const [confirmingTimedOut, setConfirmingTimedOut] = useState(false);
-  const toast = useToast();
+  // App-level error surface. Replaces the previous toast system:
+  // errors that don't belong to a specific page (profile lookup,
+  // sign-out failures) are rendered by <AppErrorBanner> above the
+  // current view. Pages that own their own error state (Login,
+  // ResetPassword, Dashboard) keep their existing inline patterns;
+  // this state is for the cross-cutting cases only.
+  const [appError, setAppError] = useState<string | null>(null);
 
   // Look up the username for a given auth user. We treat the username as
   // best-effort display data: if the profile row is missing (e.g. the user
@@ -103,16 +108,16 @@ export default function App() {
       .eq('user_id', userId)
       .maybeSingle();
     if (error) {
-      // Surface a toast so the user knows the header may show email
-      // instead of username, instead of failing silently.
-      toast.showError("Couldn't load your username. Some features may be limited.");
+      // Surface an inline banner so the user knows the header may show
+      // email instead of username, instead of failing silently.
+      setAppError("Couldn't load your username. Some features may be limited.");
       return { username: null, displayUsername: null };
     }
     return {
       username: data?.username ?? null,
       displayUsername: data?.display_username ?? null,
     };
-  }, [toast]);
+  }, []);
 
   const setUserFromSession = useCallback(
     async (sess: { user: { id: string; email?: string | null; is_anonymous?: boolean } } | null) => {
@@ -256,10 +261,11 @@ export default function App() {
       // The sign-out RPC itself failed (e.g. network down, Supabase
       // unreachable). The local session is still valid, so the user
       // remains logged in client-side. Tell them rather than failing
-      // silently.
-      toast.showError("Couldn't sign you out. Please try again.");
+      // silently — the `appError` banner above the current view
+      // carries the message and is dismissable with a click.
+      setAppError("Couldn't sign you out. Please try again.");
     }
-  }, [toast]);
+  }, []);
 
   // Update the cached username after a successful rename from the
   // settings modal. The profiles row has already been written by the
@@ -320,15 +326,18 @@ export default function App() {
       await supabase.auth.signOut({ scope: 'global' });
     } catch {
       // Same rationale as onSignOut: if this fails, the recovery
-      // session is still alive. Surface it.
-      toast.showError("Couldn't sign you out. Please try again.");
+      // session is still alive. Surface it via the `appError` banner
+      // — the LoginPage (which renders after setMode('app') +
+      // setUser(null)) doesn't have its own inline banner.
+      setAppError("Couldn't sign you out. Please try again.");
     }
-  }, [toast]);
+  }, []);
 
   // Don't flash the wrong screen while we're still figuring out the session.
   if (!ready) {
     return (
       <ConfirmProvider>
+        <AppErrorBanner message={appError} onDismiss={() => setAppError(null)} />
         <div style={{ display: 'grid', placeItems: 'center', height: '100vh', color: 'var(--muted)' }}>
           Loading…
         </div>
@@ -342,6 +351,7 @@ export default function App() {
   if (mode === 'reset') {
     return (
       <ConfirmProvider>
+        <AppErrorBanner message={appError} onDismiss={() => setAppError(null)} />
         <ResetPassword onComplete={onResetComplete} onCancel={onResetCancel} />
       </ConfirmProvider>
     );
@@ -354,6 +364,7 @@ export default function App() {
   if (mode === 'confirming') {
     return (
       <ConfirmProvider>
+        <AppErrorBanner message={appError} onDismiss={() => setAppError(null)} />
         <ConfirmingPage
           sessionEstablished={confirmingSessionSeen}
           timedOut={confirmingTimedOut}
@@ -369,6 +380,7 @@ export default function App() {
   if (!user) {
     return (
       <ConfirmProvider>
+        <AppErrorBanner message={appError} onDismiss={() => setAppError(null)} />
         <LoginPage />
       </ConfirmProvider>
     );
@@ -376,6 +388,7 @@ export default function App() {
 
   return (
     <ConfirmProvider>
+      <AppErrorBanner message={appError} onDismiss={() => setAppError(null)} />
       <Dashboard
         userId={user.id}
         userEmail={user.email}
@@ -388,5 +401,24 @@ export default function App() {
         onAccountUpgraded={handleAccountUpgraded}
       />
     </ConfirmProvider>
+  );
+}
+
+// App-level error banner. Rendered above whatever the current view is
+// (LoginPage, ResetPassword, ConfirmingPage, Dashboard) so a sign-out
+// or profile-lookup failure stays visible across the transition. Fixed
+// positioning + high z-index keeps it out of the page layout — the
+// page beneath doesn't shift. Click anywhere on the banner to dismiss.
+function AppErrorBanner({ message, onDismiss }: { message: string | null; onDismiss: () => void }) {
+  if (!message) return null;
+  return (
+    <p
+      className="app-error"
+      role="alert"
+      onClick={onDismiss}
+      aria-label="Dismiss error"
+    >
+      {message}
+    </p>
   );
 }

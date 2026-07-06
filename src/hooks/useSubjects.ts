@@ -12,7 +12,6 @@ export function useSubjects(userId: string | null, options: UseSubjectsOptions =
   const { showError } = options;
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   // Set of subject ids with an in-flight mutation. SubjectSelect
   // consults `isBusy(id)` to disable the × button while a delete is
   // mid-round-trip. Subject creation goes through SubjectManager
@@ -20,9 +19,11 @@ export function useSubjects(userId: string | null, options: UseSubjectsOptions =
   // track creates here.
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
 
+  // The single error surface. Calls the injected `showError` (which
+  // in Dashboard sets a local `dashboardError` state) — there is no
+  // internal `error` state to keep in sync.
   const surface = useCallback(
     (message: string) => {
-      setError(message);
       showError?.(message);
     },
     [showError],
@@ -60,7 +61,6 @@ export function useSubjects(userId: string | null, options: UseSubjectsOptions =
 
     async function load() {
       setLoading(true);
-      setError(null);
       const { data, error } = await supabase
         .from('subjects')
         .select('*')
@@ -155,7 +155,7 @@ export function useSubjects(userId: string | null, options: UseSubjectsOptions =
     [userId, runBusy, surface],
   );
 
-  return { subjects, loading, error, addSubject, deleteSubject, isBusy };
+  return { subjects, loading, addSubject, deleteSubject, isBusy };
 }
 
 function byName(a: Subject, b: Subject) {

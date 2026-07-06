@@ -8,7 +8,6 @@ import { useTasks } from '../hooks/useTasks';
 import { useSubjects } from '../hooks/useSubjects';
 import { useTheme } from '../hooks/useTheme';
 import { useConfirm } from '../hooks/useConfirm';
-import { useToast } from '../hooks/useToast';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useDragAndDrop } from '../hooks/useDragAndDrop';
 import { QUADRANTS } from '../types';
@@ -55,7 +54,18 @@ export function Dashboard({
   onAccountDeleted,
   onAccountUpgraded,
 }: Props) {
-  const toast = useToast();
+  const confirm = useConfirm();
+
+  // Dashboard-scoped error banner. Replaces the deleted useToast
+  // surface: hooks that need to surface a failure (useTasks,
+  // useSubjects, useDragAndDrop) call this through `showError`.
+  // The banner renders near the top of the dashboard shell so
+  // the user sees it regardless of which view is active.
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const showError = useCallback((message: string) => {
+    setDashboardError(message);
+  }, []);
+
   const {
     tasks,
     liveTasks,
@@ -64,7 +74,6 @@ export function Dashboard({
     restoreLiveTasks,
     clearLiveTasksSnapshot,
     loading,
-    error,
     createTask,
     updateTask,
     setDueDate,
@@ -74,11 +83,10 @@ export function Dashboard({
     reorder,
     reorderBusy,
     isBusy: isTaskBusy,
-  } = useTasks(userId, { showError: toast.showError });
+  } = useTasks(userId, { showError });
   const { subjects, addSubject, deleteSubject, isBusy: isSubjectBusy } = useSubjects(userId, {
-    showError: toast.showError,
+    showError,
   });
-  const confirm = useConfirm();
 
   const [view, setView] = useState<View>('dashboard');
   const [editing, setEditing] = useState<
@@ -106,7 +114,7 @@ export function Dashboard({
     clearLiveTasksSnapshot,
     reorder,
     setDueDate,
-    surface: toast.showError,
+    surface: showError,
   });
 
   // Active tab: open tasks grouped by quadrant; Done tab: completed
@@ -289,9 +297,13 @@ export function Dashboard({
           />
         )}
 
-        {error && (
-          <p className="dashboard-error" role="alert">
-            {error}
+        {dashboardError && (
+          <p
+            className="dashboard-error"
+            role="alert"
+            onClick={() => setDashboardError(null)}
+          >
+            {dashboardError}
           </p>
         )}
 

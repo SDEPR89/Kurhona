@@ -114,3 +114,35 @@ form {
 .footer a:hover {
   text-decoration: underline;
 }
+
+/* ---------- App-level error banner ----------
+   Rendered by App.tsx above whatever the current view is
+   (LoginPage, ResetPassword, ConfirmingPage, Dashboard) so a
+   sign-out or profile-lookup failure stays visible across the
+   transition. Fixed positioning keeps the page beneath from
+   shifting; high z-index keeps it above any in-page modals.
+   Click anywhere on the banner to dismiss. */
+.app-error {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  max-width: 480px;
+  width: calc(100% - 32px);
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 14%, var(--bg));
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  margin: 0;
+  text-align: center;
+}
+
+.app-error:hover {
+  background: color-mix(in srgb, var(--danger) 20%, var(--bg));
+}

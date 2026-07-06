@@ -91,11 +91,43 @@ export function Visualizer3D({
     activeEditingTaskIdRef.current = activeEditingTaskId;
   }, [activeEditingTaskId]);
 
+  // Ref to the camera-reset handler so the "Reset Camera" button can
+  // reach it without going through a window global. Assigned in the
+  // WebGL effect (which is the only place that holds the live camera
+  // and controls), cleared in cleanup. Button calls
+  // `resetCameraRef.current?.()` — see the comment near the ref.
+  const resetCameraRef = useRef<(() => void) | null>(null);
+
   const completionPercentageRef = useRef(completionPercentage);
 
   useEffect(() => {
     completionPercentageRef.current = completionPercentage;
   }, [completionPercentage]);
+
+  // Container dimensions, measured via ResizeObserver. The WebGL
+  // effect needs a real width/height before PerspectiveCamera can
+  // set its aspect — if we initialize with 0×0 the renderer produces
+  // a blank canvas. Mount-time is the most common failure point
+  // (the dashboard-pane parent may not have laid out yet), but
+  // window resize and device rotation hit the same path.
+  const [size, setSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    // Initial measurement — the observer fires on mount but we don't
+    // want to wait one tick for the first valid dimension.
+    setSize({ w: container.clientWidth, h: container.clientHeight });
+    const observer = new ResizeObserver(() => {
+      setSize({ w: container.clientWidth, h: container.clientHeight });
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  // Stable ref the button can call to reset the camera. Lives on a
+  // ref (not `window.resetVisCamera`) so it can't be undefined in
+  // the gap between effect cleanup and re-assignment when `tasks`
+  // changes mid-click.
   // Compute stats for HUD overlay
   const stats = {
     total: tasks.length,
@@ -109,6 +141,11 @@ export function Visualizer3D({
     const container = containerRef.current;
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
+    // Wait for the container to be laid out — a 0×0 element gives
+    // PerspectiveCamera a NaN aspect, and the canvas renders blank
+    // until the next size change. The ResizeObserver above will
+    // re-run this effect with a real measurement.
+    if (size.w === 0 || size.h === 0) return;
 
     // Detect light or dark mode
     let isDark = document.documentElement.getAttribute('data-theme') !== 'light';
@@ -120,12 +157,23 @@ export function Visualizer3D({
     // 2. Camera setup
     const camera = new THREE.PerspectiveCamera(
       45,
-      container.clientWidth / container.clientHeight,
+      size.w / size.h,
       0.1,
       100
     );
-    // Nice high overview angle
-    camera.position.set(0, 12, 16);
+    // Portrait phones frame the orbital rings differently — the
+    // landscape framing crops the top/bottom on a tall viewport, so
+    // we pull the camera up and back. `initialCamPos` / `initialDistance`
+    // are captured once at effect init and reused by the outro zoom
+    // and the reset handler so the three places can never drift out
+    // of sync. Recomputed every effect run, so a layout change
+    // (e.g. rotate-to-portrait via the ResizeObserver) reframes.
+    const isPortrait = size.w < size.h;
+    const initialCamPos = isPortrait
+      ? new THREE.Vector3(0, 18, 24)
+      : new THREE.Vector3(0, 12, 16);
+    const initialDistance = isPortrait ? 30.0 : 20.0;
+    camera.position.copy(initialCamPos);
 
     // 3. Renderer setup
     const renderer = new THREE.WebGLRenderer({
@@ -133,7 +181,7 @@ export function Visualizer3D({
       antialias: true,
       alpha: true,
     });
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setSize(size.w, size.h);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -144,7 +192,10 @@ export function Visualizer3D({
     controls.dampingFactor = 0.05;
     controls.maxPolarAngle = Math.PI / 2.1; // Limit camera from going below ground
     controls.minDistance = 3;
-    controls.maxDistance = 30;
+    // 50 leaves comfortable headroom past the portrait overview
+    // distance of 30 — orbit rings top out at radius 9.5, so the
+    // user can pull back to ~5× the outermost ring without clipping.
+    controls.maxDistance = 50;
 
     // 5. Lighting
     const ambientLight = new THREE.AmbientLight(isDark ? 0x090d16 : 0xfffff0, 0.7);
@@ -464,13 +515,18 @@ export function Visualizer3D({
           // Modal was closed! Start OUTRO zoom-out animation!
           startTarget.copy(controls.target);
           startCamPos.copy(camera.position);
-          
-          // Zoom out along the current angle back to overview distance (20 units)
+
+          // Zoom out along the current angle back to the overview
+          // distance captured at effect init. Using the captured
+          // value (not a re-read of containerRef.current) keeps the
+          // outro stable across a rapid view switch — the ref can be
+          // null mid-tear-down, but `initialDistance` is the value
+          // the camera was framed with, which is what we want.
           const center = new THREE.Vector3(0, 0.5, 0);
           const dir = camera.position.clone().sub(center).normalize();
           endTarget.set(0, 0.5, 0);
-          endCamPos.copy(center).add(dir.multiplyScalar(20.0));
-          
+          endCamPos.copy(center).add(dir.multiplyScalar(initialDistance));
+
           animationStartTime = performance.now();
           currentAnimationDuration = 700; // 700ms slow zoom out
           isAnimating = true;
@@ -660,44 +716,37 @@ export function Visualizer3D({
 
     tick();
 
-    // Reset camera trigger attached directly to controls
+    // Reset camera handler. Stored on a ref (not `window`) so the
+    // button can always reach it — the previous `window.resetVisCamera`
+    // pattern was undefined in the gap between effect cleanup and
+    // re-assignment whenever `tasks` changed mid-click.
     const handleResetCamera = () => {
       controls.reset();
-      camera.position.set(0, 12, 16);
+      camera.position.copy(initialCamPos);
       controls.target.set(0, 0.5, 0);
       controls.update();
     };
+    resetCameraRef.current = handleResetCamera;
 
-    // Attach camera reset to window element for helper usage
-    (window as any).resetVisCamera = handleResetCamera;
+    // (No window assignment — see the comment on resetCameraRef.)
 
-    // Handle screen resize
-    const handleResize = () => {
-      if (!container) return;
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-
-      renderer.setSize(w, h);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    };
-
-    window.addEventListener('resize', handleResize);
+    // (The old window.resize handler is gone — the ResizeObserver
+    // effect above now drives size changes. Re-deriving the camera
+    // position on rotate/resize happens for free because `size` is
+    // in this effect's deps: the effect re-runs, re-measures
+    // container dimensions, and recomputes initialCamPos /
+    // initialDistance from the new isPortrait value.)
 
     // 11. Component cleanup
     return () => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('resize', handleResize);
       observer.disconnect();
-      
+      resetCameraRef.current = null;
+
       if (canvas) {
         canvas.removeEventListener('click', onCanvasClick);
       }
-
-      delete (window as any).resetVisCamera;
 
       // Dispose resources
       nucleusGeom.dispose();
@@ -705,7 +754,7 @@ export function Visualizer3D({
       innerCoreGeom.dispose();
       innerCoreMat.dispose();
       sphereGeom.dispose();
-      
+
       taskNodes.forEach((node) => {
         (node.mesh.material as THREE.Material).dispose();
       });
@@ -717,7 +766,7 @@ export function Visualizer3D({
 
       renderer.dispose();
     };
-  }, [tasks, subjects, onEdit, completionPercentage]);
+  }, [tasks, subjects, onEdit, completionPercentage, size]);
 
   // Find subject details for the tooltip
   const hoveredTaskSubject = hoveredTask?.subject_id
@@ -825,11 +874,7 @@ export function Visualizer3D({
           <button
             type="button"
             className="vis-btn"
-            onClick={() => {
-              if (typeof (window as any).resetVisCamera === 'function') {
-                (window as any).resetVisCamera();
-              }
-            }}
+            onClick={() => resetCameraRef.current?.()}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M23 12a11 11 0 1 1-2.9-7.7L23 7" />

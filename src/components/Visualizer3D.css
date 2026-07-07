@@ -287,26 +287,22 @@
     left: 12px;
     width: auto;
     max-width: 160px;
-    padding: 10px 12px;
+    padding: 8px 12px;
     border-radius: 12px;
     border: 1px solid var(--glass-border);
   }
 
+  /* On mobile show only the summary header line — hide all ring rows */
   .visualizer-hud h3 {
-    font-size: 0.75rem;
-    margin-bottom: 8px;
-    padding-bottom: 6px;
+    font-size: 0.78rem;
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+    white-space: nowrap;
   }
 
-  .hud-ring-item {
-    font-size: 0.72rem;
-    margin-bottom: 6px;
-  }
-
-  .hud-ring-color {
-    width: 7px;
-    height: 7px;
-    margin-right: 6px;
+  .visualizer-hud .hud-ring-item {
+    display: none;
   }
 
   /* Controls bar — stays absolute at the bottom */

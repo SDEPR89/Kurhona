@@ -129,7 +129,7 @@ export function Visualizer3D({
 
   // Compute stats for HUD overlay
   const stats = {
-    total: tasks.length,
+    total: tasks.length + testTasks.length,
     do_first: tasks.filter(t => t.quadrant === 'do_first').length,
     schedule: tasks.filter(t => t.quadrant === 'schedule').length,
     delegate: tasks.filter(t => t.quadrant === 'delegate').length,

@@ -1,5 +1,6 @@
 // ---------------------------------------------------------------------------
-// SessionSection — sits at the top of the modal to show current identity.
+// SessionSection — sits at the top of the modal to show current identity
+// and provide a Sign Out button (visible on all screen sizes).
 // ---------------------------------------------------------------------------
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
   // Case-preserving form of the username (what the header shows).
   currentDisplayUsername: string | null;
   isAnonymous: boolean;
+  onSignOut: () => void;
 }
 
 export function SessionSection({
@@ -15,11 +17,8 @@ export function SessionSection({
   currentUsername,
   currentDisplayUsername,
   isAnonymous,
+  onSignOut,
 }: Props) {
-  // For real accounts, show the email (the unique identifier). For
-  // anonymous users show "Guest" — there's no other identity to
-  // surface and the upgrade CTA below explains how to convert
-  // this session.
   const identity = isAnonymous
     ? 'Guest'
     : userEmail ?? currentDisplayUsername ?? currentUsername ?? '';
@@ -29,9 +28,17 @@ export function SessionSection({
       <h3>Session</h3>
       <p className="settings-help">
         {isAnonymous
-          ? 'You’re signed in as a guest. Your tasks save to this browser only. Upgrade below to sync across devices.'
+          ? "You're signed in as a guest. Your tasks save to this browser only. Upgrade below to sync across devices."
           : `Signed in as ${identity}.`}
       </p>
+      <button
+        type="button"
+        className="btn-secondary"
+        onClick={onSignOut}
+        style={{ marginTop: '8px' }}
+      >
+        Sign out
+      </button>
     </section>
   );
 }

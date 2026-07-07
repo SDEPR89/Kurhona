@@ -438,6 +438,7 @@ export function Dashboard({
           currentDisplayUsername={userDisplayUsername}
           isAnonymous={isAnonymous}
           onClose={() => setSettingsOpen(false)}
+          onSignOut={handleSignOut}
           onUsernameUpdated={onUsernameUpdated}
           onAccountDeleted={onAccountDeleted}
           onAccountUpgraded={onAccountUpgraded}

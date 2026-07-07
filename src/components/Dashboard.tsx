@@ -763,6 +763,18 @@ function DashboardMobileTabbar({ view, onChangeView, onOpenSettings }: Dashboard
 
       <button
         type="button"
+        className={`mobile-tab${view === 'tests' ? ' is-active' : ''}`}
+        onClick={() => onChangeView('tests')}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M9 11l3 3L22 4" />
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+        </svg>
+        <span>Tests</span>
+      </button>
+
+      <button
+        type="button"
         className={`mobile-tab${view === 'calendar' ? ' is-active' : ''}`}
         onClick={() => onChangeView('calendar')}
       >
@@ -785,18 +797,6 @@ function DashboardMobileTabbar({ view, onChangeView, onOpenSettings }: Dashboard
           <polyline points="22 4 12 14.01 9 11.01" />
         </svg>
         <span>Completed</span>
-      </button>
-
-      <button
-        type="button"
-        className={`mobile-tab${view === 'tests' ? ' is-active' : ''}`}
-        onClick={() => onChangeView('tests')}
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M9 11l3 3L22 4" />
-          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-        </svg>
-        <span>Tests</span>
       </button>
 
       <button

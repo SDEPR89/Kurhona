@@ -366,7 +366,7 @@
      under it. The nav itself is fixed and translucent, so content
      stays visible above the bar; this padding just guarantees the
      last row of cards isn't permanently under the bar. */
-  .dashboard { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0)); }
+  .dashboard { padding-bottom: calc(60px + env(safe-area-inset-bottom, 0)); }
 
   .mobile-tabbar {
     position: fixed;
@@ -375,9 +375,9 @@
     bottom: 0;
     z-index: 30;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 4px;
-    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0));
+    grid-template-columns: repeat(6, 1fr);
+    gap: 2px;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0));
     background: var(--glass-bg-strong);
     border-top: 1px solid var(--glass-border);
     backdrop-filter: blur(18px) saturate(160%);
@@ -391,13 +391,13 @@
     align-items: center;
     justify-content: center;
     gap: 2px;
-    padding: 6px 4px;
+    padding: 5px 2px;
     background: transparent;
     border: 0;
     border-radius: 8px;
     color: var(--fg-muted);
     font: inherit;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 500;
     cursor: pointer;
     transition: color .15s, background .15s, transform .1s;
@@ -554,7 +554,21 @@
      fixed tabbar would overlap the last quadrant. */
   .dashboard {
     padding: 12px;
-    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0));
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0));
+  }
+}
+
+/* ---------- Very narrow phones (≤380px) ----------
+   With 6 tabs the text labels squeeze uncomfortably below ~380px.
+   Hide them so only icons show — the active teal colour + icon is
+   enough affordance at this width. */
+@media (max-width: 380px) {
+  .mobile-tab span {
+    display: none;
+  }
+  .mobile-tab {
+    padding: 8px 2px;
+    gap: 0;
   }
 }
 
@@ -2548,10 +2562,10 @@ button.task-status-dot.status-dot--submitted::before {
 .dashboard-mobile-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
   background: radial-gradient(circle at center, var(--page-bg-top) 0%, var(--page-bg-bottom) 100%);
-  padding-bottom: 84px; /* Space for bottom tab bar */
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 :root[data-theme='light'] .dashboard-mobile-container {
@@ -2569,25 +2583,44 @@ button.task-status-dot.status-dot--submitted::before {
 }
 
 .dashboard-mobile-container .dashboard-main-content {
-  height: auto;
-  flex-grow: 1;
-  overflow: visible;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(60px + env(safe-area-inset-bottom, 0));
+}
+
+.dashboard-mobile-container .dashboard-view {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 3D pane fills the full remaining viewport on mobile */
+.dashboard-mobile-container .dashboard-pane--3d {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .dashboard-mobile-container .dashboard-pane--matrix {
   padding: 16px;
   flex-direction: column;
-  overflow-y: visible;
-  height: auto;
+  overflow-y: auto;
+  height: 100%;
 }
 
 .dashboard-mobile-container .dashboard-pane--calendar {
   padding: 16px;
-  height: auto;
+  overflow-y: auto;
+  height: 100%;
 }
 
-.dashboard-mobile-container .dashboard-view[key="completed"] {
-  padding: 16px;
+/* Tests and completed views scroll vertically */
+.dashboard-mobile-container .dashboard-view {
+  overflow-y: auto;
 }
 
 /* ---------- Tests view ----------
@@ -2872,6 +2905,14 @@ button.task-status-dot.status-dot--submitted::before {
 
 /* ── Responsive ── */
 @media (max-width: 600px) {
+  .tests-card-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}
+
+@media (max-width: 400px) {
   .tests-panel-header {
     flex-wrap: wrap;
   }
@@ -2879,12 +2920,6 @@ button.task-status-dot.status-dot--submitted::before {
   .tests-btn-add {
     width: 100%;
     justify-content: center;
-  }
-
-  .tests-card-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
   }
 }
 

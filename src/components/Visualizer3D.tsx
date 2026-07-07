@@ -227,15 +227,6 @@ export function Visualizer3D({
     pointLight.position.set(0, 0, 0);
     scene.add(pointLight);
 
-    // 6. Grid and ground
-    const gridColor = isDark ? 0x334155 : 0x94a3b8;
-    const gridHelper = new THREE.GridHelper(30, 30, gridColor, gridColor);
-    gridHelper.position.y = -0.5;
-    (gridHelper.material as THREE.LineBasicMaterial).opacity = 0.25;
-    (gridHelper.material as THREE.LineBasicMaterial).transparent = true;
-    gridHelper.visible = isDark;
-    scene.add(gridHelper);
-
     // 7. Rotating orbital container groups
     const mainGroup = new THREE.Group();
     scene.add(mainGroup);
@@ -438,8 +429,6 @@ export function Visualizer3D({
         isDark = currentThemeDark;
         scene.fog = new THREE.FogExp2(isDark ? 0x020617 : 0xfffff0, 0.015);
         ambientLight.color.setHex(isDark ? 0x090d16 : 0xfffff0);
-        (gridHelper.material as THREE.LineBasicMaterial).color.setHex(isDark ? 0x334155 : 0x94a3b8);
-        gridHelper.visible = isDark;
       }
     });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });

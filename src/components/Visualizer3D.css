@@ -266,42 +266,78 @@
 
 /* Mobile Responsiveness */
 @media (max-width: 720px) {
-  .visualizer-hud {
+  .visualizer-container {
     position: relative;
-    top: 0;
-    left: 0;
     width: 100%;
-    margin-bottom: 0;
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
-    border-top: none;
-    padding: 12px 16px;
-  }
-  
-  .visualizer-instruction {
-    display: none;
+    height: 100%;
+    min-height: 0;
   }
 
-  .visualizer-controls-bar {
-    position: relative;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    width: 100%;
-    padding: 12px 16px;
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
-    border-bottom: none;
-    background: var(--glass-bg);
-    backdrop-filter: blur(16px);
-    border-top: 1px solid var(--glass-border);
+  .visualizer-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    height: 100% !important;
   }
-  
-  .visualizer-container {
-    height: 100%;
-    min-height: calc(100vh - 120px);
+
+  /* HUD — compact floating card, top-left, smaller */
+  .visualizer-hud {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    width: auto;
+    max-width: 160px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+  }
+
+  .visualizer-hud h3 {
+    font-size: 0.75rem;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+  }
+
+  .hud-ring-item {
+    font-size: 0.72rem;
+    margin-bottom: 6px;
+  }
+
+  .hud-ring-color {
+    width: 7px;
+    height: 7px;
+    margin-right: 6px;
+  }
+
+  /* Controls bar — stays absolute at the bottom */
+  .visualizer-controls-bar {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    padding: 10px 12px;
+    gap: 8px;
+    border-radius: 12px;
+    width: auto;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .vis-btn {
+    padding: 6px 10px;
+    font-size: 0.78rem;
+  }
+
+  .vis-select {
+    padding: 6px 8px;
+    font-size: 0.78rem;
+    max-width: 120px;
+  }
+
+  .visualizer-instruction {
+    display: none;
   }
 }
 

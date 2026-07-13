@@ -869,31 +869,12 @@ function DashboardView(props: DashboardViewProps) {
       grouped.groups.delegate.length +
       grouped.groups.eliminate.length;
 
-    // "This week" = Mon 00:00 local time through end of Sunday.
-    // Only tasks completed within the current week count toward the
-    // percentage so it resets naturally every Monday morning.
-    const now = new Date();
-    const dayOfWeek = now.getDay(); // 0 = Sun
-    const daysSinceMon = (dayOfWeek + 6) % 7;  // Mon=0 … Sun=6
-    const weekStart = new Date(now);
-    weekStart.setHours(0, 0, 0, 0);
-    weekStart.setDate(now.getDate() - daysSinceMon);
-    const weekStartMs = weekStart.getTime();
-
-    const isThisWeek = (completedAt: string | null) =>
-      !!completedAt && new Date(completedAt).getTime() >= weekStartMs;
-
-    const thisWeekDone = grouped.done.filter(t => isThisWeek(t.completed_at));
-    const thisWeekDoneTests = grouped.doneTests.filter(t => isThisWeek(t.completed_at));
-    const doneCount = thisWeekDone.length + thisWeekDoneTests.length;
-    // Denominator = everything that exists or was completed this week.
-    // Old completed tasks (prior weeks) are excluded so they don't
-    // drag the percentage down at the start of a new week.
-    const totalCount =
-      activeCount +
-      grouped.activeTests.length +
-      thisWeekDone.length +
-      thisWeekDoneTests.length;
+    // Percentage reflects ALL currently-known completed tasks against
+    // the active workload — no weekly snap to 0%. Completed tasks older
+    // than 14 days are already filtered out by useTasks, so what shows
+    // here is always a recent snapshot (active + done in the last 14d).
+    const doneCount = grouped.done.length + grouped.doneTests.length;
+    const totalCount = activeCount + grouped.activeTests.length + doneCount;
     const completionPercentage = totalCount > 0 ? doneCount / totalCount : 0;
 
     return (

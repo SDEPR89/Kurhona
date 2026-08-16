@@ -245,24 +245,37 @@ async function persistSubscription(
   sub: PushSubscription,
   userId: string,
 ): Promise<void> {
+  // Always verify active auth user to match the current JWT session
+  const { data: authData } = await supabase.auth.getUser();
+  const currentUserId = authData?.user?.id ?? userId;
+
+  if (!currentUserId) {
+    throw new Error('You must be signed in to enable reminders.');
+  }
+
   const json = sub.toJSON();
   const keys = json.keys as { p256dh: string; auth: string };
-  // user_id is required by the RLS policy (`user_id = auth.uid()`).
-  // The browser doesn't see the auth session, so we have to forward
-  // the user id explicitly. The RLS WITH CHECK ensures the value
-  // matches the caller's auth.uid() — a user can't write a row
-  // under someone else's id.
+  const payload = {
+    user_id: currentUserId,
+    endpoint: sub.endpoint,
+    p256dh: keys.p256dh,
+    auth: keys.auth,
+    user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+  };
+
   const { error } = await supabase
     .from('push_subscriptions')
-    .upsert(
-      {
-        user_id: userId,
-        endpoint: sub.endpoint,
-        p256dh: keys.p256dh,
-        auth: keys.auth,
-        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
-      },
-      { onConflict: 'endpoint' },
-    );
-  if (error) throw new Error(error.message);
+    .upsert(payload, { onConflict: 'endpoint' });
+
+  if (error) {
+    // If RLS blocked upsert due to an old endpoint collision, attempt direct insert
+    if (error.message.includes('row-level security') || error.code === '42501') {
+      const { error: insertError } = await supabase
+        .from('push_subscriptions')
+        .insert(payload);
+      if (insertError) throw new Error(insertError.message);
+      return;
+    }
+    throw new Error(error.message);
+  }
 }

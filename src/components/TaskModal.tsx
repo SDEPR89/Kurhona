@@ -30,6 +30,38 @@ interface Props {
   isSubjectBusy?: (subjectId: string) => boolean;
 }
 
+function formatDateString(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getTodayString(): string {
+  return formatDateString(new Date());
+}
+
+function getTomorrowString(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return formatDateString(d);
+}
+
+function getPlusDaysString(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return formatDateString(d);
+}
+
+function getInOneHour(): { dateStr: string; timeStr: string } {
+  const d = new Date();
+  d.setHours(d.getHours() + 1);
+  const dateStr = formatDateString(d);
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return { dateStr, timeStr: `${hours}:${minutes}` };
+}
+
 export function TaskModal({
   mode,
   initial,
@@ -194,6 +226,51 @@ export function TaskModal({
                   onChange={(e) => setDueDate(e.target.value)}
                   disabled={busy}
                 />
+                <div className="quick-chips">
+                  <button
+                    type="button"
+                    className={`chip-btn${dueDate === getTodayString() ? ' is-active' : ''}`}
+                    onClick={() => setDueDate(getTodayString())}
+                    disabled={busy}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    className={`chip-btn${dueDate === getTomorrowString() ? ' is-active' : ''}`}
+                    onClick={() => setDueDate(getTomorrowString())}
+                    disabled={busy}
+                  >
+                    Tomorrow
+                  </button>
+                  <button
+                    type="button"
+                    className={`chip-btn${dueDate === getPlusDaysString(3) ? ' is-active' : ''}`}
+                    onClick={() => setDueDate(getPlusDaysString(3))}
+                    disabled={busy}
+                  >
+                    +3 Days
+                  </button>
+                  <button
+                    type="button"
+                    className={`chip-btn${dueDate === getPlusDaysString(7) ? ' is-active' : ''}`}
+                    onClick={() => setDueDate(getPlusDaysString(7))}
+                    disabled={busy}
+                  >
+                    Next Week
+                  </button>
+                  {dueDate && (
+                    <button
+                      type="button"
+                      className="chip-btn chip-btn--clear"
+                      onClick={() => setDueDate('')}
+                      disabled={busy}
+                      title="Clear due date"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="field">
@@ -208,6 +285,64 @@ export function TaskModal({
                   onChange={(e) => setDueTime(e.target.value)}
                   disabled={busy}
                 />
+                <div className="quick-chips">
+                  <button
+                    type="button"
+                    className="chip-btn chip-btn--urgent"
+                    onClick={() => {
+                      const { dateStr, timeStr } = getInOneHour();
+                      setDueDate(dateStr);
+                      setDueTime(timeStr);
+                    }}
+                    disabled={busy}
+                    title="Set task due in 1 hour from now"
+                  >
+                    ⚡ In 1 Hour
+                  </button>
+                  <button
+                    type="button"
+                    className={`chip-btn${dueTime === '09:00' ? ' is-active' : ''}`}
+                    onClick={() => setDueTime('09:00')}
+                    disabled={busy}
+                  >
+                    09:00
+                  </button>
+                  <button
+                    type="button"
+                    className={`chip-btn${dueTime === '13:00' ? ' is-active' : ''}`}
+                    onClick={() => setDueTime('13:00')}
+                    disabled={busy}
+                  >
+                    13:00
+                  </button>
+                  <button
+                    type="button"
+                    className={`chip-btn${dueTime === '17:00' ? ' is-active' : ''}`}
+                    onClick={() => setDueTime('17:00')}
+                    disabled={busy}
+                  >
+                    17:00
+                  </button>
+                  <button
+                    type="button"
+                    className={`chip-btn${dueTime === '23:59' ? ' is-active' : ''}`}
+                    onClick={() => setDueTime('23:59')}
+                    disabled={busy}
+                  >
+                    23:59
+                  </button>
+                  {dueTime && (
+                    <button
+                      type="button"
+                      className="chip-btn chip-btn--clear"
+                      onClick={() => setDueTime('')}
+                      disabled={busy}
+                      title="Clear due time"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 

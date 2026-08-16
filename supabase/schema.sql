@@ -494,38 +494,32 @@ exception
 end $$;
 select cron.schedule(
   'queue-due-reminders',
-  -- 7 minutes past the hour: spread load off the :00 thundering
-  -- herd. Tasks are date-precision so hourly cadence is plenty.
-  '7 * * * *',
+  -- Runs every 5 minutes so no task window is missed
+  '*/5 * * * *',
   $cron$
     with target_times as (
       select
         t.id, t.user_id, t.title, t.due_date, t.due_time,
-        ((t.due_date::timestamp) + coalesce(t.due_time, time '00:00'))
-          at time zone 'UTC' as due_at
+        ((t.due_date::timestamp) + coalesce(t.due_time, time '00:00')) as due_at
       from tasks t
       where t.completed_at is null
     ),
     hits as (
-      -- 3-day window: due in [69h, 75h] from now (±3h around 72h
-      -- so a single hourly tick still catches every task even
-      -- with scheduler drift).
+      -- 3-day window: due in [69h, 75h] from now
       select id, user_id, '3d' as tier
         from target_times
-        where due_at - now() between interval '69 hours' and interval '75 hours'
+        where due_at - (now() at time zone 'UTC') between interval '69 hours' and interval '75 hours'
       union all
-      -- 1-day window: [21h, 27h] around 24h.
+      -- 1-day window: due in [21h, 27h] from now
       select id, user_id, '1d' as tier
         from target_times
-        where due_at - now() between interval '21 hours' and interval '27 hours'
+        where due_at - (now() at time zone 'UTC') between interval '21 hours' and interval '27 hours'
       union all
-      -- 1-hour window: only when due_time is set (we can't pin
-      -- a 1h reminder to a date-only task). [55min, 65min] around
-      -- 60min.
+      -- 1-hour window: due within the next 65 minutes (only when due_time is set)
       select id, user_id, '1h' as tier
         from target_times
         where due_time is not null
-          and due_at - now() between interval '55 minutes' and interval '65 minutes'
+          and due_at - (now() at time zone 'UTC') between interval '0 minutes' and interval '65 minutes'
     )
     insert into notification_log (task_id, user_id, tier)
       select h.id, h.user_id, h.tier from hits h

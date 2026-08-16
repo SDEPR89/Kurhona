@@ -1525,12 +1525,22 @@ button.task-status-dot.status-dot--submitted::before {
   color: var(--fg);
 }
 
+.field.field-subject {
+  position: relative !important;
+  z-index: 50 !important;
+}
+
+.form-row.form-row-datetime {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
 .subject-select-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  z-index: 999 !important;
+  position: absolute !important;
+  top: calc(100% + 6px) !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 99999 !important;
   list-style: none;
   margin: 0;
   padding: 6px;
@@ -1543,6 +1553,7 @@ button.task-status-dot.status-dot--submitted::before {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.95) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+  isolation: isolate !important;
   animation: subject-select-menu-in .18s cubic-bezier(.2, .8, .2, 1);
 }
 
@@ -2977,7 +2988,7 @@ button.task-status-dot.status-dot--submitted::before {
 .picker-inline-icon {
   flex-shrink: 0;
   margin-left: 12px;
-  margin-right: 6px;
+  margin-right: 10px;
   color: var(--fg-muted, #94a3b8);
   pointer-events: none;
   transition: color 0.2s ease;
@@ -2991,11 +3002,11 @@ button.task-status-dot.status-dot--submitted::before {
 .picker-input-wrapper .input.picker-input {
   flex: 1;
   width: 100%;
-  padding-left: 0;
-  padding-right: 30px;
-  border: none;
-  background: transparent;
-  box-shadow: none;
+  padding-left: 4px !important;
+  padding-right: 28px !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
   cursor: pointer;
   font-weight: 500;
   color-scheme: dark;

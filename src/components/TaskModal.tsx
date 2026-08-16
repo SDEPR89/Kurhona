@@ -210,7 +210,7 @@ export function TaskModal({
               />
             </div>
 
-            <div className="field">
+            <div className="field field-subject">
               <label htmlFor="task-subject">Subject</label>
               <SubjectSelect
                 subjects={subjects}
@@ -224,7 +224,7 @@ export function TaskModal({
             </div>
 
             {/* Date & Time Input Row */}
-            <div className="form-row">
+            <div className="form-row form-row-datetime">
               <div className="field">
                 <div className="field-header">
                   <label htmlFor="task-due">Due Date</label>

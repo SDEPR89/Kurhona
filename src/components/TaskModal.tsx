@@ -16,17 +16,12 @@ interface Props {
     description: string | null;
     subject_id: string | null;
     due_date: string | null;
-    // 'HH:MM' from the time input, or null. Postgres normalizes to
-    // 'HH:MM:SS' on write and we read it back the same way.
     due_time: string | null;
     quadrant: Quadrant;
     status: Status;
     task_type: TaskType;
   }) => Promise<boolean>;
   onDelete?: () => void;
-  // Hook-level predicate: passed straight through to SubjectSelect
-  // so a × delete on a subject row disables itself while the request
-  // is in flight.
   isSubjectBusy?: (subjectId: string) => boolean;
 }
 
@@ -44,12 +39,6 @@ function getTodayString(): string {
 function getTomorrowString(): string {
   const d = new Date();
   d.setDate(d.getDate() + 1);
-  return formatDateString(d);
-}
-
-function getPlusDaysString(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
   return formatDateString(d);
 }
 
@@ -112,24 +101,16 @@ export function TaskModal({
   const [description, setDescription] = useState(initial.description ?? '');
   const [subjectId, setSubjectId] = useState<string>(initial.subject_id ?? '');
   const [dueDate, setDueDate] = useState<string>(initial.due_date ?? '');
-  // Postgres time round-trips as 'HH:MM:SS'; the <input type="time">
-  // expects 'HH:MM'. Slice the first 5 chars on the way in so the
-  // input shows the right value when editing an existing task.
   const [dueTime, setDueTime] = useState<string>(
     initial.due_time ? initial.due_time.slice(0, 5) : '',
   );
   const [quadrant, setQuadrant] = useState<Quadrant>(initial.quadrant);
   const [status, setStatus] = useState<Status>(initial.status ?? 'not_started');
-  // task_type is read-only after the modal opens — it is set at
-  // creation time and never changed inside the modal.
   const [taskType] = useState<TaskType>(initial.task_type ?? 'homework');
   const [addingSubject, setAddingSubject] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
 
-  // Lock body scroll while modal is open + close on Escape.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -161,18 +142,12 @@ export function TaskModal({
       return;
     }
     setBusy(true);
-    // `onSave` returns false when the underlying hook call failed
-    // (e.g. network). The hook already surfaces a toast in that
-    // case; the modal stays open so the user can retry without
-    // re-opening. We also show an inline error so the failure
-    // is visible from inside the form, not only in the toast.
+
     const ok = await onSave({
       title: trimmed,
       description: description.trim() || null,
       subject_id: subjectId || null,
       due_date: dueDate || null,
-      // Empty string from the <input type="time"> means "no time set" —
-      // translate to null so the column stores null rather than ''.
       due_time: dueTime || null,
       quadrant,
       status,
@@ -182,8 +157,6 @@ export function TaskModal({
       setError("Couldn't save the task. Please try again.");
       setBusy(false);
     }
-    // On success the parent closes the modal (and unmounts us), so
-    // we deliberately don't reset `busy` here.
   }
 
   return (
@@ -238,313 +211,6 @@ export function TaskModal({
             </div>
 
             <div className="field">
-              <label htmlFor="task-description">
-                Description <span className="muted">(optional)</span>
-              </label>
-              <textarea
-                id="task-description"
-                className="input textarea"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Notes, page numbers, etc."
-                rows={3}
-                disabled={busy}
-              />
-            </div>
-
-            <div className="form-row">
-              <div className="field relative-field">
-                <label htmlFor="task-due">Due date</label>
-                <div className="picker-trigger-box">
-                  <button
-                    id="task-due"
-                    type="button"
-                    className={`custom-picker-trigger${dueDate ? ' has-value' : ''}`}
-                    onClick={() => {
-                      setShowDatePicker(!showDatePicker);
-                      setShowTimePicker(false);
-                    }}
-                    disabled={busy}
-                  >
-                    <svg className="picker-trigger-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                      <line x1="16" y1="2" x2="16" y2="6" />
-                      <line x1="8" y1="2" x2="8" y2="6" />
-                      <line x1="3" y1="10" x2="21" y2="10" />
-                    </svg>
-                    <span className="picker-trigger-label">
-                      {dueDate ? getHumanDateLabel(dueDate) : 'Select date'}
-                    </span>
-                    {dueDate && (
-                      <span
-                        className="picker-trigger-clear"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDueDate('');
-                        }}
-                        title="Clear date"
-                      >
-                        ×
-                      </span>
-                    )}
-                  </button>
-                </div>
-
-                {showDatePicker && (
-                  <div className="custom-popover-picker">
-                    <div className="popover-section-title">Quick Select Date</div>
-                    <div className="popover-grid">
-                      <button
-                        type="button"
-                        className={`popover-option-btn${dueDate === getTodayString() ? ' is-active' : ''}`}
-                        onClick={() => {
-                          setDueDate(getTodayString());
-                          setShowDatePicker(false);
-                        }}
-                      >
-                        Today
-                      </button>
-                      <button
-                        type="button"
-                        className={`popover-option-btn${dueDate === getTomorrowString() ? ' is-active' : ''}`}
-                        onClick={() => {
-                          setDueDate(getTomorrowString());
-                          setShowDatePicker(false);
-                        }}
-                      >
-                        Tomorrow
-                      </button>
-                      <button
-                        type="button"
-                        className={`popover-option-btn${dueDate === getPlusDaysString(3) ? ' is-active' : ''}`}
-                        onClick={() => {
-                          setDueDate(getPlusDaysString(3));
-                          setShowDatePicker(false);
-                        }}
-                      >
-                        +3 Days
-                      </button>
-                      <button
-                        type="button"
-                        className={`popover-option-btn${dueDate === getPlusDaysString(7) ? ' is-active' : ''}`}
-                        onClick={() => {
-                          setDueDate(getPlusDaysString(7));
-                          setShowDatePicker(false);
-                        }}
-                      >
-                        Next Week
-                      </button>
-                    </div>
-
-                    <div className="popover-divider" />
-
-                    <div className="popover-custom-row">
-                      <span className="popover-sublabel">Custom Date:</span>
-                      <input
-                        type="date"
-                        className="input popover-date-input"
-                        value={dueDate}
-                        onChange={(e) => setDueDate(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="popover-footer">
-                      {dueDate && (
-                        <button
-                          type="button"
-                          className="popover-action-btn popover-action-btn--clear"
-                          onClick={() => {
-                            setDueDate('');
-                            setShowDatePicker(false);
-                          }}
-                        >
-                          Clear Date
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="popover-action-btn popover-action-btn--done"
-                        onClick={() => setShowDatePicker(false)}
-                      >
-                        Done
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="field relative-field">
-                <label htmlFor="task-time">
-                  Time <span className="muted">(optional)</span>
-                </label>
-                <div className="picker-trigger-box">
-                  <button
-                    id="task-time"
-                    type="button"
-                    className={`custom-picker-trigger${dueTime ? ' has-value' : ''}`}
-                    onClick={() => {
-                      setShowTimePicker(!showTimePicker);
-                      setShowDatePicker(false);
-                    }}
-                    disabled={busy}
-                  >
-                    <svg className="picker-trigger-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <circle cx="12" cy="12" r="10" />
-                      <polyline points="12 6 12 12 16 14" />
-                    </svg>
-                    <span className="picker-trigger-label">
-                      {dueTime ? getHumanTimeLabel(dueTime) : 'Select time'}
-                    </span>
-                    {dueTime && (
-                      <span
-                        className="picker-trigger-clear"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDueTime('');
-                        }}
-                        title="Clear time"
-                      >
-                        ×
-                      </span>
-                    )}
-                  </button>
-                </div>
-
-                {showTimePicker && (
-                  <div className="custom-popover-picker">
-                    <div className="popover-section-title">Quick Select Time</div>
-                    <div className="popover-grid popover-grid--col2">
-                      <button
-                        type="button"
-                        className="popover-option-btn popover-option-btn--urgent"
-                        onClick={() => {
-                          const { dateStr, timeStr } = getInOneHour();
-                          setDueDate(dateStr);
-                          setDueTime(timeStr);
-                          setShowTimePicker(false);
-                        }}
-                      >
-                        ⚡ In 1 Hour
-                      </button>
-                      <button
-                        type="button"
-                        className={`popover-option-btn${dueTime === '09:00' ? ' is-active' : ''}`}
-                        onClick={() => {
-                          setDueTime('09:00');
-                          setShowTimePicker(false);
-                        }}
-                      >
-                        🌅 09:00 AM
-                      </button>
-                      <button
-                        type="button"
-                        className={`popover-option-btn${dueTime === '13:00' ? ' is-active' : ''}`}
-                        onClick={() => {
-                          setDueTime('13:00');
-                          setShowTimePicker(false);
-                        }}
-                      >
-                        ☀️ 01:00 PM
-                      </button>
-                      <button
-                        type="button"
-                        className={`popover-option-btn${dueTime === '17:00' ? ' is-active' : ''}`}
-                        onClick={() => {
-                          setDueTime('17:00');
-                          setShowTimePicker(false);
-                        }}
-                      >
-                        🌆 05:00 PM
-                      </button>
-                      <button
-                        type="button"
-                        className={`popover-option-btn${dueTime === '23:59' ? ' is-active' : ''}`}
-                        onClick={() => {
-                          setDueTime('23:59');
-                          setShowTimePicker(false);
-                        }}
-                      >
-                        🌙 11:59 PM
-                      </button>
-                    </div>
-
-                    <div className="popover-divider" />
-
-                    <div className="popover-custom-row">
-                      <span className="popover-sublabel">Exact Time:</span>
-                      <input
-                        type="time"
-                        className="input popover-time-input"
-                        value={dueTime}
-                        onChange={(e) => setDueTime(e.target.value)}
-                      />
-                    </div>
-
-                    <div className="popover-footer">
-                      {dueTime && (
-                        <button
-                          type="button"
-                          className="popover-action-btn popover-action-btn--clear"
-                          onClick={() => {
-                            setDueTime('');
-                            setShowTimePicker(false);
-                          }}
-                        >
-                          Clear Time
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="popover-action-btn popover-action-btn--done"
-                        onClick={() => setShowTimePicker(false)}
-                      >
-                        Done
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="form-row">
-              {taskType !== 'test' && (
-                <div className="field">
-                  <label htmlFor="task-quadrant">Quadrant</label>
-                  <select
-                    id="task-quadrant"
-                    className="input"
-                    value={quadrant}
-                    onChange={(e) => setQuadrant(e.target.value as Quadrant)}
-                    disabled={busy}
-                  >
-                    {QUADRANTS.map((q) => (
-                      <option key={q.id} value={q.id}>
-                        {q.order}. {q.title} — {q.subtitle}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div className="field">
-                <label htmlFor="task-status">Status</label>
-                <select
-                  id="task-status"
-                  className="input"
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as Status)}
-                  disabled={busy}
-                >
-                  {STATUSES.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="field">
               <label htmlFor="task-subject">Subject</label>
               <SubjectSelect
                 subjects={subjects}
@@ -554,6 +220,191 @@ export function TaskModal({
                 onAddNew={() => setAddingSubject(true)}
                 disabled={busy}
                 isBusy={isSubjectBusy}
+              />
+            </div>
+
+            {/* Date & Time Input Row */}
+            <div className="form-row">
+              <div className="field">
+                <div className="field-header">
+                  <label htmlFor="task-due">Due Date</label>
+                  {dueDate && <span className="field-badge">{getHumanDateLabel(dueDate)}</span>}
+                </div>
+                <div
+                  className={`picker-input-wrapper${dueDate ? ' has-value' : ''}`}
+                  onClick={(e) => {
+                    const input = e.currentTarget.querySelector('input');
+                    if (input && 'showPicker' in input) {
+                      try { input.showPicker(); } catch {}
+                    }
+                  }}
+                >
+                  <svg className="picker-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                  <input
+                    id="task-due"
+                    className="input picker-input"
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    disabled={busy}
+                  />
+                  {dueDate && (
+                    <button
+                      type="button"
+                      className="picker-clear-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDueDate('');
+                      }}
+                      title="Clear date"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="field">
+                <div className="field-header">
+                  <label htmlFor="task-time">Time <span className="muted">(optional)</span></label>
+                  {dueTime && <span className="field-badge">{getHumanTimeLabel(dueTime)}</span>}
+                </div>
+                <div
+                  className={`picker-input-wrapper${dueTime ? ' has-value' : ''}`}
+                  onClick={(e) => {
+                    const input = e.currentTarget.querySelector('input');
+                    if (input && 'showPicker' in input) {
+                      try { input.showPicker(); } catch {}
+                    }
+                  }}
+                >
+                  <svg className="picker-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  <input
+                    id="task-time"
+                    className="input picker-input"
+                    type="time"
+                    value={dueTime}
+                    onChange={(e) => setDueTime(e.target.value)}
+                    disabled={busy}
+                  />
+                  {dueTime && (
+                    <button
+                      type="button"
+                      className="picker-clear-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDueTime('');
+                      }}
+                      title="Clear time"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Preset Badges */}
+            <div className="quick-presets-bar">
+              <button
+                type="button"
+                className={`preset-chip-btn${dueDate === getTodayString() ? ' is-active' : ''}`}
+                onClick={() => setDueDate(getTodayString())}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                className={`preset-chip-btn${dueDate === getTomorrowString() ? ' is-active' : ''}`}
+                onClick={() => setDueDate(getTomorrowString())}
+              >
+                Tomorrow
+              </button>
+              <button
+                type="button"
+                className="preset-chip-btn preset-chip-btn--urgent"
+                onClick={() => {
+                  const { dateStr, timeStr } = getInOneHour();
+                  setDueDate(dateStr);
+                  setDueTime(timeStr);
+                }}
+              >
+                ⚡ In 1 Hour
+              </button>
+              {(dueDate || dueTime) && (
+                <button
+                  type="button"
+                  className="preset-chip-btn preset-chip-btn--clear"
+                  onClick={() => {
+                    setDueDate('');
+                    setDueTime('');
+                  }}
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+
+            {/* Visual Quadrant Selector */}
+            {taskType !== 'test' && (
+              <div className="field">
+                <label>Priority / Quadrant</label>
+                <div className="quadrant-selector-grid">
+                  {QUADRANTS.map((q) => (
+                    <button
+                      key={q.id}
+                      type="button"
+                      className={`quadrant-card-btn q-${q.id}${quadrant === q.id ? ' is-active' : ''}`}
+                      onClick={() => setQuadrant(q.id)}
+                      disabled={busy}
+                    >
+                      <span className="q-badge">Q{q.order}</span>
+                      <span className="q-title">{q.title}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Visual Status Selector */}
+            <div className="field">
+              <label>Status</label>
+              <div className="status-pill-group">
+                {STATUSES.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`status-pill-btn s-${s.id}${status === s.id ? ' is-active' : ''}`}
+                    onClick={() => setStatus(s.id)}
+                    disabled={busy}
+                  >
+                    <span className={`status-dot s-dot-${s.id}`} />
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="field">
+              <label htmlFor="task-description">
+                Description <span className="muted">(optional)</span>
+              </label>
+              <textarea
+                id="task-description"
+                className="input textarea"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Notes, page numbers, etc."
+                rows={2}
+                disabled={busy}
               />
             </div>
 

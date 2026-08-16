@@ -239,7 +239,7 @@ export function TaskModal({
                     }
                   }}
                 >
-                  <svg className="picker-inline-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="picker-inline-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', zIndex: 2, pointerEvents: 'none' }}>
                     <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                     <line x1="16" y1="2" x2="16" y2="6" />
                     <line x1="8" y1="2" x2="8" y2="6" />
@@ -252,6 +252,7 @@ export function TaskModal({
                     value={dueDate}
                     onChange={(e) => setDueDate(e.target.value)}
                     disabled={busy}
+                    style={{ paddingLeft: '38px' }}
                   />
                   {dueDate && (
                     <button
@@ -283,7 +284,7 @@ export function TaskModal({
                     }
                   }}
                 >
-                  <svg className="picker-inline-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="picker-inline-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', zIndex: 2, pointerEvents: 'none' }}>
                     <circle cx="12" cy="12" r="10" />
                     <polyline points="12 6 12 12 16 14" />
                   </svg>
@@ -294,6 +295,7 @@ export function TaskModal({
                     value={dueTime}
                     onChange={(e) => setDueTime(e.target.value)}
                     disabled={busy}
+                    style={{ paddingLeft: '38px' }}
                   />
                   {dueTime && (
                     <button

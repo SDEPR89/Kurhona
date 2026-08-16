@@ -98,7 +98,16 @@ export function SubjectSelect({ subjects, value, onChange, onDelete, onAddNew, d
       </button>
 
       {open && (
-        <ul className="subject-select-menu" role="listbox">
+        <ul
+          className="subject-select-menu"
+          role="listbox"
+          style={{
+            backgroundColor: 'var(--modal-solid-bg, #14172b)',
+            opacity: 1,
+            zIndex: 99999,
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.95)',
+          }}
+        >
           <li>
             <button
               type="button"

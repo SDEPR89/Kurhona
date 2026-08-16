@@ -17,14 +17,20 @@ interface Props {
   onDelete: (id: string) => Promise<boolean>;
   onAddNew: () => void;
   disabled?: boolean;
-  // Hook-level predicate from useSubjects — true while a delete for
-  // this subject id is in flight. We disable the row's × button and
-  // show a `…` glyph until the request resolves.
   isBusy?: (id: string) => boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function SubjectSelect({ subjects, value, onChange, onDelete, onAddNew, disabled, isBusy }: Props) {
-  const [open, setOpen] = useState(false);
+export function SubjectSelect({ subjects, value, onChange, onDelete, onAddNew, disabled, isBusy, onOpenChange }: Props) {
+  const [open, setOpenState] = useState(false);
+
+  const setOpen = (next: boolean | ((prev: boolean) => boolean)) => {
+    setOpenState((prev) => {
+      const val = typeof next === 'function' ? next(prev) : next;
+      onOpenChange?.(val);
+      return val;
+    });
+  };
   const rootRef = useRef<HTMLDivElement>(null);
 
   const selected = subjects.find((s) => s.id === value) ?? null;

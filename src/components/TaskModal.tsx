@@ -108,6 +108,7 @@ export function TaskModal({
   const [status, setStatus] = useState<Status>(initial.status ?? 'not_started');
   const [taskType] = useState<TaskType>(initial.task_type ?? 'homework');
   const [addingSubject, setAddingSubject] = useState(false);
+  const [isSubjectOpen, setIsSubjectOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -220,11 +221,20 @@ export function TaskModal({
                 onAddNew={() => setAddingSubject(true)}
                 disabled={busy}
                 isBusy={isSubjectBusy}
+                onOpenChange={setIsSubjectOpen}
               />
             </div>
 
             {/* Date & Time Input Row */}
-            <div className="form-row form-row-datetime">
+            <div 
+              className="form-row form-row-datetime"
+              style={{
+                visibility: isSubjectOpen ? 'hidden' : 'visible',
+                opacity: isSubjectOpen ? 0 : 1,
+                pointerEvents: isSubjectOpen ? 'none' : 'auto',
+                transition: 'opacity 0.15s ease, visibility 0.15s ease',
+              }}
+            >
               <div className="field">
                 <div className="field-header">
                   <label htmlFor="task-due">Due Date</label>

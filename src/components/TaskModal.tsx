@@ -30,36 +30,39 @@ interface Props {
   isSubjectBusy?: (subjectId: string) => boolean;
 }
 
-function formatDateString(d: Date): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+function getHumanDateLabel(dateStr: string): string | null {
+  if (!dateStr) return null;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return null;
+
+  const date = new Date(y, m - 1, d);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const target = new Date(y, m - 1, d);
+  target.setHours(0, 0, 0, 0);
+
+  const diffTime = target.getTime() - today.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 3600 * 24));
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Tomorrow';
+  if (diffDays === -1) return 'Yesterday';
+
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-function getTodayString(): string {
-  return formatDateString(new Date());
-}
+function getHumanTimeLabel(timeStr: string): string | null {
+  if (!timeStr) return null;
+  const [hStr, mStr] = timeStr.split(':');
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (isNaN(h) || isNaN(m)) return null;
 
-function getTomorrowString(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return formatDateString(d);
-}
-
-function getPlusDaysString(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return formatDateString(d);
-}
-
-function getInOneHour(): { dateStr: string; timeStr: string } {
-  const d = new Date();
-  d.setHours(d.getHours() + 1);
-  const dateStr = formatDateString(d);
-  const hours = String(d.getHours()).padStart(2, '0');
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  return { dateStr, timeStr: `${hours}:${minutes}` };
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  const minStr = String(m).padStart(2, '0');
+  return `${hour12}:${minStr} ${period}`;
 }
 
 export function TaskModal({
@@ -217,129 +220,96 @@ export function TaskModal({
 
             <div className="form-row">
               <div className="field">
-                <label htmlFor="task-due">Due date</label>
-                <input
-                  id="task-due"
-                  className="input"
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  disabled={busy}
-                />
-                <div className="quick-chips">
-                  <button
-                    type="button"
-                    className={`chip-btn${dueDate === getTodayString() ? ' is-active' : ''}`}
-                    onClick={() => setDueDate(getTodayString())}
+                <div className="field-header">
+                  <label htmlFor="task-due">Due date</label>
+                  {dueDate && (
+                    <span className="field-badge">{getHumanDateLabel(dueDate)}</span>
+                  )}
+                </div>
+                <div
+                  className={`picker-input-wrapper${dueDate ? ' has-value' : ''}`}
+                  onClick={(e) => {
+                    const input = e.currentTarget.querySelector('input');
+                    if (input && 'showPicker' in input) {
+                      try { input.showPicker(); } catch {}
+                    }
+                  }}
+                >
+                  <svg className="picker-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                  <input
+                    id="task-due"
+                    className="input picker-input"
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
                     disabled={busy}
-                  >
-                    Today
-                  </button>
-                  <button
-                    type="button"
-                    className={`chip-btn${dueDate === getTomorrowString() ? ' is-active' : ''}`}
-                    onClick={() => setDueDate(getTomorrowString())}
-                    disabled={busy}
-                  >
-                    Tomorrow
-                  </button>
-                  <button
-                    type="button"
-                    className={`chip-btn${dueDate === getPlusDaysString(3) ? ' is-active' : ''}`}
-                    onClick={() => setDueDate(getPlusDaysString(3))}
-                    disabled={busy}
-                  >
-                    +3 Days
-                  </button>
-                  <button
-                    type="button"
-                    className={`chip-btn${dueDate === getPlusDaysString(7) ? ' is-active' : ''}`}
-                    onClick={() => setDueDate(getPlusDaysString(7))}
-                    disabled={busy}
-                  >
-                    Next Week
-                  </button>
+                  />
                   {dueDate && (
                     <button
                       type="button"
-                      className="chip-btn chip-btn--clear"
-                      onClick={() => setDueDate('')}
+                      className="picker-clear-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDueDate('');
+                      }}
                       disabled={busy}
-                      title="Clear due date"
+                      title="Clear date"
+                      aria-label="Clear date"
                     >
-                      Clear
+                      ×
                     </button>
                   )}
                 </div>
               </div>
 
               <div className="field">
-                <label htmlFor="task-time">
-                  Time <span className="muted">(optional)</span>
-                </label>
-                <input
-                  id="task-time"
-                  className="input"
-                  type="time"
-                  value={dueTime}
-                  onChange={(e) => setDueTime(e.target.value)}
-                  disabled={busy}
-                />
-                <div className="quick-chips">
-                  <button
-                    type="button"
-                    className="chip-btn chip-btn--urgent"
-                    onClick={() => {
-                      const { dateStr, timeStr } = getInOneHour();
-                      setDueDate(dateStr);
-                      setDueTime(timeStr);
-                    }}
+                <div className="field-header">
+                  <label htmlFor="task-time">
+                    Time <span className="muted">(optional)</span>
+                  </label>
+                  {dueTime && (
+                    <span className="field-badge">{getHumanTimeLabel(dueTime)}</span>
+                  )}
+                </div>
+                <div
+                  className={`picker-input-wrapper${dueTime ? ' has-value' : ''}`}
+                  onClick={(e) => {
+                    const input = e.currentTarget.querySelector('input');
+                    if (input && 'showPicker' in input) {
+                      try { input.showPicker(); } catch {}
+                    }
+                  }}
+                >
+                  <svg className="picker-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  <input
+                    id="task-time"
+                    className="input picker-input"
+                    type="time"
+                    value={dueTime}
+                    onChange={(e) => setDueTime(e.target.value)}
                     disabled={busy}
-                    title="Set task due in 1 hour from now"
-                  >
-                    ⚡ In 1 Hour
-                  </button>
-                  <button
-                    type="button"
-                    className={`chip-btn${dueTime === '09:00' ? ' is-active' : ''}`}
-                    onClick={() => setDueTime('09:00')}
-                    disabled={busy}
-                  >
-                    09:00
-                  </button>
-                  <button
-                    type="button"
-                    className={`chip-btn${dueTime === '13:00' ? ' is-active' : ''}`}
-                    onClick={() => setDueTime('13:00')}
-                    disabled={busy}
-                  >
-                    13:00
-                  </button>
-                  <button
-                    type="button"
-                    className={`chip-btn${dueTime === '17:00' ? ' is-active' : ''}`}
-                    onClick={() => setDueTime('17:00')}
-                    disabled={busy}
-                  >
-                    17:00
-                  </button>
-                  <button
-                    type="button"
-                    className={`chip-btn${dueTime === '23:59' ? ' is-active' : ''}`}
-                    onClick={() => setDueTime('23:59')}
-                    disabled={busy}
-                  >
-                    23:59
-                  </button>
+                  />
                   {dueTime && (
                     <button
                       type="button"
-                      className="chip-btn chip-btn--clear"
-                      onClick={() => setDueTime('')}
+                      className="picker-clear-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDueTime('');
+                      }}
                       disabled={busy}
-                      title="Clear due time"
+                      title="Clear time"
+                      aria-label="Clear time"
                     >
-                      Clear
+                      ×
                     </button>
                   )}
                 </div>

@@ -2930,61 +2930,92 @@ button.task-status-dot.status-dot--submitted::before {
   }
 }
 
-/* Quick Date & Time Preset Chips */
-.quick-chips {
+/* Modern Date & Time Picker Container UX/UI */
+.field-header {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.chip-btn {
-  padding: 4px 10px;
-  font-size: 0.76rem;
-  font-weight: 500;
-  border-radius: 14px;
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
-  background: var(--input-bg, rgba(255, 255, 255, 0.05));
-  color: var(--fg-muted, #94a3b8);
+.field-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--accent-transparent, rgba(59, 130, 246, 0.15));
+  color: var(--accent, #3b82f6);
+  border: 1px solid var(--accent-border, rgba(59, 130, 246, 0.25));
+}
+
+.picker-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 1px solid var(--input-border, rgba(255, 255, 255, 0.15));
+  border-radius: 10px;
+  background: var(--input-bg, rgba(255, 255, 255, 0.04));
+  transition: all 0.2s ease;
   cursor: pointer;
-  transition: all 0.18s ease;
-  user-select: none;
 }
 
-.chip-btn:hover {
-  border-color: var(--fg-soft, #cbd5e1);
-  color: var(--fg, #f8fafc);
-  background: rgba(255, 255, 255, 0.1);
+.picker-input-wrapper:hover {
+  border-color: var(--fg-soft, rgba(255, 255, 255, 0.3));
+  background: var(--input-hover-bg, rgba(255, 255, 255, 0.07));
 }
 
-.chip-btn.is-active {
-  background: var(--accent, #3b82f6);
-  color: #ffffff;
+.picker-input-wrapper:focus-within {
   border-color: var(--accent, #3b82f6);
-  font-weight: 600;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  background: var(--input-focus-bg, rgba(255, 255, 255, 0.08));
 }
 
-.chip-btn--urgent {
-  background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
-  border-color: rgba(239, 68, 68, 0.3);
-  font-weight: 600;
+.picker-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--fg-muted, #94a3b8);
+  pointer-events: none;
+  transition: color 0.2s ease;
 }
 
-.chip-btn--urgent:hover {
-  background: rgba(239, 68, 68, 0.25);
-  color: #f87171;
-  border-color: rgba(239, 68, 68, 0.5);
+.picker-input-wrapper:hover .picker-icon,
+.picker-input-wrapper.has-value .picker-icon {
+  color: var(--accent, #3b82f6);
 }
 
-.chip-btn--clear {
-  color: var(--fg-muted, #64748b);
-  border-color: transparent;
+.picker-input-wrapper .input.picker-input {
+  width: 100%;
+  padding-left: 36px;
+  padding-right: 32px;
+  border: none;
   background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  font-weight: 500;
 }
 
-.chip-btn--clear:hover {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
+.picker-clear-btn {
+  position: absolute;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--fg-muted, #94a3b8);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
+
+.picker-clear-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
 

@@ -1527,28 +1527,22 @@ button.task-status-dot.status-dot--submitted::before {
 
 .subject-select-menu {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + 6px);
   left: 0;
   right: 0;
-  z-index: 200 !important;
+  z-index: 200;
   list-style: none;
   margin: 0;
   padding: 6px;
   max-height: 240px;
   overflow-y: auto;
-  background: #0f172a !important;
-  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  background: var(--modal-solid-bg, #181b34) !important;
+  border: 1px solid var(--border-soft, rgba(255, 255, 255, 0.25)) !important;
   border-radius: 12px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85);
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   animation: subject-select-menu-in .18s cubic-bezier(.2, .8, .2, 1);
-}
-
-:root[data-theme='light'] .subject-select-menu {
-  background: #ffffff !important;
-  border-color: rgba(0, 0, 0, 0.2) !important;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25) !important;
 }
 
 @keyframes subject-select-menu-in {
@@ -2938,86 +2932,91 @@ button.task-status-dot.status-dot--submitted::before {
   }
 }
 
-/* Custom Date & Time Picker Boxes */
-.custom-date-box {
-  position: relative;
+/* Date & Time Picker Container UX/UI */
+.field-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  height: 42px;
-  padding: 0 12px;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.field-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
   border-radius: 10px;
+  background: var(--accent-transparent, rgba(59, 130, 246, 0.15));
+  color: var(--accent, #3b82f6);
+  border: 1px solid var(--accent-border, rgba(59, 130, 246, 0.25));
+}
+
+.picker-input-wrapper {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  width: 100%;
   border: 1px solid var(--input-border, rgba(255, 255, 255, 0.15));
+  border-radius: 10px;
   background: var(--input-bg, rgba(255, 255, 255, 0.04));
   transition: all 0.2s ease;
   cursor: pointer;
-  overflow: hidden;
 }
 
-.custom-date-box:hover {
+.picker-input-wrapper:hover {
   border-color: var(--fg-soft, rgba(255, 255, 255, 0.3));
-  background: var(--input-hover-bg, rgba(255, 255, 255, 0.08));
+  background: var(--input-hover-bg, rgba(255, 255, 255, 0.07));
 }
 
-.custom-date-box:focus-within {
+.picker-input-wrapper:focus-within {
   border-color: var(--accent, #3b82f6);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  background: var(--input-focus-bg, rgba(255, 255, 255, 0.08));
 }
 
-.picker-box-icon {
+.picker-icon {
+  position: absolute !important;
+  left: 12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
   color: var(--fg-muted, #94a3b8);
-  flex-shrink: 0;
   pointer-events: none;
   transition: color 0.2s ease;
+  z-index: 5;
 }
 
-.custom-date-box:hover .picker-box-icon,
-.custom-date-box:focus-within .picker-box-icon {
+.picker-input-wrapper:hover .picker-icon,
+.picker-input-wrapper.has-value .picker-icon {
   color: var(--accent, #3b82f6);
 }
 
-.picker-box-text {
-  flex: 1;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--fg-muted, #94a3b8);
-  pointer-events: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.picker-box-text.is-set {
-  color: var(--fg, #f8fafc);
-  font-weight: 600;
-}
-
-.hidden-picker-input {
-  position: absolute;
-  top: 0;
-  left: 0;
+.picker-input-wrapper .input.picker-input {
   width: 100%;
-  height: 100%;
-  opacity: 0 !important;
+  padding-left: 38px;
+  padding-right: 32px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
   cursor: pointer;
-  z-index: 2;
+  font-weight: 500;
   color-scheme: dark;
 }
 
-.hidden-picker-input::-webkit-calendar-picker-indicator {
+/* Hide native duplicate icons while keeping full input click area */
+.picker-input-wrapper .input.picker-input::-webkit-calendar-picker-indicator {
   position: absolute;
   top: 0;
   left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
   height: 100%;
-  opacity: 0 !important;
+  opacity: 0;
   cursor: pointer;
 }
 
-.picker-box-clear {
-  position: relative;
-  z-index: 3;
+.picker-clear-btn {
+  position: absolute;
+  right: 8px;
   width: 22px;
   height: 22px;
   display: flex;
@@ -3031,10 +3030,11 @@ button.task-status-dot.status-dot--submitted::before {
   line-height: 1;
   cursor: pointer;
   transition: all 0.15s ease;
+  z-index: 2;
 }
 
-.picker-box-clear:hover {
-  background: rgba(239, 68, 68, 0.25);
+.picker-clear-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
   color: #ef4444;
 }
 

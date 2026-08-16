@@ -222,33 +222,24 @@ export function TaskModal({
                 isBusy={isSubjectBusy}
               />
             </div>
-
             {/* Date & Time Input Row */}
             <div className="form-row">
               <div className="field">
-                <div className="field-header">
-                  <label htmlFor="task-due">Due Date</label>
-                  {dueDate && <span className="field-badge">{getHumanDateLabel(dueDate)}</span>}
-                </div>
-                <div
-                  className={`picker-input-wrapper${dueDate ? ' has-value' : ''}`}
-                  onClick={(e) => {
-                    const input = e.currentTarget.querySelector('input');
-                    if (input && 'showPicker' in input) {
-                      try { input.showPicker(); } catch {}
-                    }
-                  }}
-                >
-                  <svg className="picker-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <label htmlFor="task-due">Due Date</label>
+                <div className="custom-date-box">
+                  <svg className="picker-box-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                     <line x1="16" y1="2" x2="16" y2="6" />
                     <line x1="8" y1="2" x2="8" y2="6" />
                     <line x1="3" y1="10" x2="21" y2="10" />
                   </svg>
+                  <span className={`picker-box-text${dueDate ? ' is-set' : ''}`}>
+                    {dueDate ? getHumanDateLabel(dueDate) : 'Select Date'}
+                  </span>
                   <input
                     id="task-due"
-                    className="input picker-input"
                     type="date"
+                    className="hidden-picker-input"
                     value={dueDate}
                     onChange={(e) => setDueDate(e.target.value)}
                     disabled={busy}
@@ -256,7 +247,7 @@ export function TaskModal({
                   {dueDate && (
                     <button
                       type="button"
-                      className="picker-clear-btn"
+                      className="picker-box-clear"
                       onClick={(e) => {
                         e.stopPropagation();
                         setDueDate('');
@@ -270,27 +261,19 @@ export function TaskModal({
               </div>
 
               <div className="field">
-                <div className="field-header">
-                  <label htmlFor="task-time">Time <span className="muted">(optional)</span></label>
-                  {dueTime && <span className="field-badge">{getHumanTimeLabel(dueTime)}</span>}
-                </div>
-                <div
-                  className={`picker-input-wrapper${dueTime ? ' has-value' : ''}`}
-                  onClick={(e) => {
-                    const input = e.currentTarget.querySelector('input');
-                    if (input && 'showPicker' in input) {
-                      try { input.showPicker(); } catch {}
-                    }
-                  }}
-                >
-                  <svg className="picker-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <label htmlFor="task-time">Time <span className="muted">(optional)</span></label>
+                <div className="custom-date-box">
+                  <svg className="picker-box-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="10" />
-                    <polyline points="12 6 12 12 16 14" />
+                    <polyline points="12 6 12 16 14" />
                   </svg>
+                  <span className={`picker-box-text${dueTime ? ' is-set' : ''}`}>
+                    {dueTime ? getHumanTimeLabel(dueTime) : 'Select Time'}
+                  </span>
                   <input
                     id="task-time"
-                    className="input picker-input"
                     type="time"
+                    className="hidden-picker-input"
                     value={dueTime}
                     onChange={(e) => setDueTime(e.target.value)}
                     disabled={busy}
@@ -298,7 +281,7 @@ export function TaskModal({
                   {dueTime && (
                     <button
                       type="button"
-                      className="picker-clear-btn"
+                      className="picker-box-clear"
                       onClick={(e) => {
                         e.stopPropagation();
                         setDueTime('');

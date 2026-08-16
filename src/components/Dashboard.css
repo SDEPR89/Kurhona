@@ -2938,91 +2938,86 @@ button.task-status-dot.status-dot--submitted::before {
   }
 }
 
-/* Date & Time Picker Container UX/UI */
-.field-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.field-badge {
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: var(--accent-transparent, rgba(59, 130, 246, 0.15));
-  color: var(--accent, #3b82f6);
-  border: 1px solid var(--accent-border, rgba(59, 130, 246, 0.25));
-}
-
-.picker-input-wrapper {
+/* Custom Date & Time Picker Boxes */
+.custom-date-box {
   position: relative;
   display: flex;
   align-items: center;
+  gap: 10px;
   width: 100%;
-  border: 1px solid var(--input-border, rgba(255, 255, 255, 0.15));
+  height: 42px;
+  padding: 0 12px;
   border-radius: 10px;
+  border: 1px solid var(--input-border, rgba(255, 255, 255, 0.15));
   background: var(--input-bg, rgba(255, 255, 255, 0.04));
   transition: all 0.2s ease;
   cursor: pointer;
+  overflow: hidden;
 }
 
-.picker-input-wrapper:hover {
+.custom-date-box:hover {
   border-color: var(--fg-soft, rgba(255, 255, 255, 0.3));
-  background: var(--input-hover-bg, rgba(255, 255, 255, 0.07));
+  background: var(--input-hover-bg, rgba(255, 255, 255, 0.08));
 }
 
-.picker-input-wrapper:focus-within {
+.custom-date-box:focus-within {
   border-color: var(--accent, #3b82f6);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-  background: var(--input-focus-bg, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
 }
 
-.picker-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
+.picker-box-icon {
   color: var(--fg-muted, #94a3b8);
+  flex-shrink: 0;
   pointer-events: none;
   transition: color 0.2s ease;
-  z-index: 1;
 }
 
-.picker-input-wrapper:hover .picker-icon,
-.picker-input-wrapper.has-value .picker-icon {
+.custom-date-box:hover .picker-box-icon,
+.custom-date-box:focus-within .picker-box-icon {
   color: var(--accent, #3b82f6);
 }
 
-.picker-input-wrapper .input.picker-input {
-  width: 100%;
-  padding-left: 38px;
-  padding-right: 32px;
-  border: none;
-  background: transparent;
-  box-shadow: none;
-  cursor: pointer;
+.picker-box-text {
+  flex: 1;
+  font-size: 0.9rem;
   font-weight: 500;
-  color-scheme: dark;
+  color: var(--fg-muted, #94a3b8);
+  pointer-events: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Hide native duplicate icons while keeping full input click area */
-.picker-input-wrapper .input.picker-input::-webkit-calendar-picker-indicator {
+.picker-box-text.is-set {
+  color: var(--fg, #f8fafc);
+  font-weight: 600;
+}
+
+.hidden-picker-input {
   position: absolute;
   top: 0;
   left: 0;
-  right: 0;
-  bottom: 0;
   width: 100%;
   height: 100%;
-  opacity: 0;
+  opacity: 0 !important;
+  cursor: pointer;
+  z-index: 2;
+  color-scheme: dark;
+}
+
+.hidden-picker-input::-webkit-calendar-picker-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0 !important;
   cursor: pointer;
 }
 
-.picker-clear-btn {
-  position: absolute;
-  right: 8px;
+.picker-box-clear {
+  position: relative;
+  z-index: 3;
   width: 22px;
   height: 22px;
   display: flex;
@@ -3036,11 +3031,10 @@ button.task-status-dot.status-dot--submitted::before {
   line-height: 1;
   cursor: pointer;
   transition: all 0.15s ease;
-  z-index: 2;
 }
 
-.picker-clear-btn:hover {
-  background: rgba(239, 68, 68, 0.2);
+.picker-box-clear:hover {
+  background: rgba(239, 68, 68, 0.25);
   color: #ef4444;
 }
 

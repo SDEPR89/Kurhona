@@ -499,19 +499,35 @@ select cron.schedule(
       select h.id, h.user_id, h.tier from hits h
       on conflict (task_id, tier) do nothing;
 
+-- App settings key-value table (used to store send_push_url & send_push_key
+-- without requiring ALTER DATABASE superuser permissions on Supabase Cloud).
+create table if not exists app_settings (
+  key        text primary key,
+  value      text not null,
+  created_at timestamptz not null default now()
+);
+
     -- Fire the Edge Function. pg_net.http_post is async — the
     -- cron doesn't wait for a response, it returns immediately
-    -- and the function runs in the background. The two GUCs
-    -- (`app.send_push_url`, `app.send_push_key`) are set with
-    -- ALTER DATABASE so the URL and shared secret aren't in the
-    -- schema file.
+    -- and the function runs in the background. URL and shared
+    -- secret are read from app_settings table (or GUC fallback).
     do $$
     declare
-      send_push_url text := nullif(current_setting('app.send_push_url', true), '');
-      send_push_key text := nullif(current_setting('app.send_push_key', true), '');
+      send_push_url text;
+      send_push_key text;
     begin
+      select value into send_push_url from app_settings where key = 'send_push_url';
+      select value into send_push_key from app_settings where key = 'send_push_key';
+
+      if send_push_url is null then
+        send_push_url := nullif(current_setting('app.send_push_url', true), '');
+      end if;
+      if send_push_key is null then
+        send_push_key := nullif(current_setting('app.send_push_key', true), '');
+      end if;
+
       if send_push_url is null or send_push_key is null then
-        raise notice 'Skipping send-push call: app.send_push_url or app.send_push_key is not configured';
+        raise notice 'Skipping send-push call: send_push_url or send_push_key is not configured in app_settings';
       else
         perform net.http_post(
           url     := send_push_url,

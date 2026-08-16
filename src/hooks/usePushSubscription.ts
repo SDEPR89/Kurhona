@@ -245,7 +245,21 @@ async function persistSubscription(
   sub: PushSubscription,
   userId: string,
 ): Promise<void> {
-  // Always verify active auth user to match the current JWT session
+  const json = sub.toJSON();
+  const keys = json.keys as { p256dh: string; auth: string };
+  const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : null;
+
+  // 1. Try secure RPC function (bypasses RLS endpoint conflict across user sessions on same device)
+  const { error: rpcErr } = await supabase.rpc('upsert_push_subscription', {
+    p_endpoint: sub.endpoint,
+    p_p256dh: keys.p256dh,
+    p_auth: keys.auth,
+    p_user_agent: userAgent,
+  });
+
+  if (!rpcErr) return;
+
+  // 2. Fallback to direct table upsert if RPC has not been created yet in database
   const { data: authData } = await supabase.auth.getUser();
   const currentUserId = authData?.user?.id ?? userId;
 
@@ -253,29 +267,18 @@ async function persistSubscription(
     throw new Error('You must be signed in to enable reminders.');
   }
 
-  const json = sub.toJSON();
-  const keys = json.keys as { p256dh: string; auth: string };
-  const payload = {
-    user_id: currentUserId,
-    endpoint: sub.endpoint,
-    p256dh: keys.p256dh,
-    auth: keys.auth,
-    user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
-  };
-
-  const { error } = await supabase
+  const { error: upsertErr } = await supabase
     .from('push_subscriptions')
-    .upsert(payload, { onConflict: 'endpoint' });
+    .upsert(
+      {
+        user_id: currentUserId,
+        endpoint: sub.endpoint,
+        p256dh: keys.p256dh,
+        auth: keys.auth,
+        user_agent: userAgent,
+      },
+      { onConflict: 'endpoint' }
+    );
 
-  if (error) {
-    // If RLS blocked upsert due to an old endpoint collision, attempt direct insert
-    if (error.message.includes('row-level security') || error.code === '42501') {
-      const { error: insertError } = await supabase
-        .from('push_subscriptions')
-        .insert(payload);
-      if (insertError) throw new Error(insertError.message);
-      return;
-    }
-    throw new Error(error.message);
-  }
+  if (upsertErr) throw new Error(upsertErr.message);
 }

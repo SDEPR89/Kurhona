@@ -416,6 +416,38 @@ drop policy if exists "push_subscriptions: own rows" on push_subscriptions;
 create policy "push_subscriptions: own rows" on push_subscriptions
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+-- RPC function to re-assign or insert a device's Web Push endpoint cleanly.
+-- Solves the RLS edge-case where an endpoint registered under an earlier user
+-- session on the same device is re-claimed by the current authenticated user.
+create or replace function public.upsert_push_subscription(
+  p_endpoint text,
+  p_p256dh text,
+  p_auth text,
+  p_user_agent text default null
+) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated' using errcode = '42501';
+  end if;
+
+  insert into public.push_subscriptions (user_id, endpoint, p256dh, auth, user_agent)
+  values (auth.uid(), p_endpoint, p_p256dh, p_auth, p_user_agent)
+  on conflict (endpoint) do update set
+    user_id    = auth.uid(),
+    p256dh     = excluded.p256dh,
+    auth       = excluded.auth,
+    user_agent = excluded.user_agent;
+end;
+$$;
+
+revoke all on function public.upsert_push_subscription(text, text, text, text) from public;
+grant execute on function public.upsert_push_subscription(text, text, text, text) to authenticated;
+
+
 -- Dedup table. PK (task_id, tier) so the same reminder never fires
 -- twice for the same task window. The Edge Function sets `sent_at`
 -- on success; null = queued but not yet delivered. The

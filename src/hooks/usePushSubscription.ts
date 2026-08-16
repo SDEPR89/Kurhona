@@ -24,6 +24,7 @@ interface UsePushSubscriptionResult {
   error: string | null;
   subscribe: () => Promise<{ ok: boolean; error?: string }>;
   unsubscribe: () => Promise<{ ok: boolean; error?: string }>;
+  sendTestNotification: () => Promise<{ ok: boolean; error?: string }>;
 }
 
 // Detect iOS Safari tab (push only works when installed). Other mobile
@@ -179,8 +180,62 @@ export function usePushSubscription(userId: string | null): UsePushSubscriptionR
       return { ok: false, error: message };
     }
   }, []);
+  const sendTestNotification = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+        return { ok: false, error: 'Browser environment required.' };
+      }
+      if (!('Notification' in window)) {
+        return { ok: false, error: 'Notifications are not supported in this browser.' };
+      }
 
-  return { state, error, subscribe, unsubscribe };
+      let perm = Notification.permission;
+      if (perm === 'default') {
+        perm = await Notification.requestPermission();
+      }
+
+      if (perm !== 'granted') {
+        return { ok: false, error: 'Notification permission is blocked. Enable notifications in browser settings.' };
+      }
+
+      // Try ServiceWorker showNotification with a 1.5s timeout fallback
+      let swDispatched = false;
+      if ('serviceWorker' in navigator) {
+        try {
+          const swReadyPromise = navigator.serviceWorker.ready;
+          const timeoutPromise = new Promise<null>((res) => setTimeout(() => res(null), 1500));
+          const reg = await Promise.race([swReadyPromise, timeoutPromise]);
+
+          if (reg && reg.showNotification) {
+            await reg.showNotification('Kurhona Reminder Test 🔔', {
+              body: 'Push notifications are working perfectly on this device!',
+              icon: '/logo.png',
+              badge: '/favicon.png',
+              tag: 'kurhona-test',
+              data: { url: '/' },
+              vibrate: [120, 60, 120],
+            } as NotificationOptions);
+            swDispatched = true;
+          }
+        } catch (swErr) {
+          console.warn('[Kurhona] SW showNotification failed, using fallback Notification API:', swErr);
+        }
+      }
+
+      if (!swDispatched) {
+        new Notification('Kurhona Reminder Test 🔔', {
+          body: 'Push notifications are working perfectly on this device!',
+          icon: '/logo.png',
+        });
+      }
+
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
+  }, []);
+
+  return { state, error, subscribe, unsubscribe, sendTestNotification };
 }
 
 // Persist a PushSubscription to Supabase. Called both on initial

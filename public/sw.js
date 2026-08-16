@@ -1,34 +1,79 @@
-// Kurhona service worker — receives Web Push messages and shows
-// system notifications. No fetch handler: we don't cache the app
-// shell or assets, so the SW's only job is handling the two events
-// the push protocol requires (`push` and `notificationclick`).
-//
-// skipWaiting + clients.claim make the first install pick up
-// immediately, so the user doesn't have to refresh twice after
-// subscribing. The scope is `/` (set by register('/sw.js')) —
-// this means the SW intercepts *every* fetch, but since we
-// don't install a fetch handler the browser falls through to
-// the network as normal.
+// Kurhona Service Worker — handles Web Push notifications and PWA offline caching.
 
-self.addEventListener("install", () => {
-  self.skipWaiting();
+const CACHE_NAME = "kurhona-shell-v1";
+const STATIC_ASSETS = [
+  "/",
+  "/index.html",
+  "/manifest.json",
+  "/favicon.png",
+  "/logo.png",
+];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)).then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys.map((key) => {
+            if (key !== CACHE_NAME) {
+              return caches.delete(key);
+            }
+          })
+        )
+      )
+      .then(() => self.clients.claim())
+  );
+});
+
+// Fetch handler: Network-first for dynamic & API calls, fallback to cache for app shell when offline
+self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+
+  // Skip non-GET requests and Supabase / external API calls
+  if (
+    event.request.method !== "GET" ||
+    url.pathname.startsWith("/rest/v1") ||
+    url.pathname.startsWith("/auth/v1") ||
+    url.hostname.includes("supabase.co")
+  ) {
+    return;
+  }
+
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        // Cache successful responses for same-origin static assets
+        if (response && response.status === 200 && response.type === "basic") {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return response;
+      })
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        // If navigating to a page offline, return cached index.html
+        if (event.request.mode === "navigate") {
+          return caches.match("/");
+        }
+        return Promise.reject("offline");
+      })
+  );
 });
 
 self.addEventListener("push", (event) => {
-  // The send-push Edge Function serializes a JSON body with
-  // { title, body, tag, data }. data is the only field we use
-  // here for click-through; the rest is rendered verbatim.
   let payload = { title: "Kurhona", body: "", tag: "kurhona", data: {} };
   if (event.data) {
     try {
       payload = { ...payload, ...event.data.json() };
     } catch {
-      // If the body isn't JSON, fall back to the raw text as the
-      // body so the user still sees something.
       payload.body = event.data.text();
     }
   }
@@ -38,8 +83,6 @@ self.addEventListener("push", (event) => {
     icon: "/logo.png",
     badge: "/favicon.png",
     data: payload.data,
-    // Vibrate on Android, ignored elsewhere. Pattern: short-pause-
-    // short. Doesn't repeat.
     vibrate: [120, 60, 120],
   };
   event.waitUntil(self.registration.showNotification(payload.title, options));
@@ -47,20 +90,18 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  // Focus an existing tab if one is open; otherwise open a new
-  // tab at the URL the payload specified (defaults to "/").
   const url = (event.notification.data && event.notification.data.url) || "/";
   event.waitUntil(
     (async () => {
       const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       for (const client of all) {
-        // Same-origin match — focus the tab rather than open a new one.
         if (new URL(client.url).origin === self.location.origin) {
           await client.focus();
           return;
         }
       }
       await self.clients.openWindow(url);
-    })(),
+    })()
   );
 });
+

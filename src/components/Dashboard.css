@@ -3000,13 +3000,13 @@ button.task-status-dot.status-dot--submitted::before {
   color: #f87171;
 }
 
-/* Floating Popover Card */
+/* Floating Popover Card (Desktop & Tablet) */
 .custom-popover-picker {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
   right: 0;
-  z-index: 120;
+  z-index: 150;
   padding: 14px;
   border-radius: 14px;
   border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
@@ -3018,6 +3018,54 @@ button.task-status-dot.status-dot--submitted::before {
 @keyframes popover-appear {
   from { opacity: 0; transform: translateY(-6px) scale(0.98); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Mobile & Touch Responsiveness (Bottom Sheet Adaptation) */
+@media (max-width: 640px) {
+  .custom-picker-trigger {
+    min-height: 44px;
+    padding: 12px 14px;
+    font-size: 0.95rem;
+  }
+
+  .custom-popover-picker {
+    position: fixed;
+    top: auto;
+    bottom: 16px;
+    left: 16px;
+    right: 16px;
+    max-width: 500px;
+    margin: 0 auto;
+    border-radius: 20px;
+    padding: 18px;
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.65);
+    animation: popover-slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes popover-slide-up {
+    from { opacity: 0; transform: translateY(100%); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .popover-option-btn {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.88rem;
+  }
+
+  .popover-date-input,
+  .popover-time-input {
+    font-size: 16px !important; /* Prevents auto-zoom on iOS */
+    padding: 8px 12px;
+  }
+
+  .popover-action-btn {
+    min-height: 38px;
+    padding: 8px 16px;
+    font-size: 0.85rem;
+  }
 }
 
 .popover-section-title {
@@ -3142,6 +3190,7 @@ button.task-status-dot.status-dot--submitted::before {
 .popover-action-btn--done:hover {
   opacity: 0.9;
 }
+
 
 
 

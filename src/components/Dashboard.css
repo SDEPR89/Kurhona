@@ -1530,16 +1530,17 @@ button.task-status-dot.status-dot--submitted::before {
   top: calc(100% + 6px);
   left: 0;
   right: 0;
-  z-index: 200;
+  z-index: 999 !important;
   list-style: none;
   margin: 0;
   padding: 6px;
   max-height: 240px;
   overflow-y: auto;
-  background: var(--modal-solid-bg, #181b34) !important;
+  background-color: var(--modal-solid-bg, #0f172a) !important;
+  opacity: 1 !important;
   border: 1px solid var(--border-soft, rgba(255, 255, 255, 0.25)) !important;
   border-radius: 12px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.95) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   animation: subject-select-menu-in .18s cubic-bezier(.2, .8, .2, 1);
@@ -2973,26 +2974,25 @@ button.task-status-dot.status-dot--submitted::before {
   background: var(--input-focus-bg, rgba(255, 255, 255, 0.08));
 }
 
-.picker-icon {
-  position: absolute !important;
-  left: 12px !important;
-  top: 50% !important;
-  transform: translateY(-50%) !important;
+.picker-inline-icon {
+  flex-shrink: 0;
+  margin-left: 12px;
+  margin-right: 6px;
   color: var(--fg-muted, #94a3b8);
   pointer-events: none;
   transition: color 0.2s ease;
-  z-index: 5;
 }
 
-.picker-input-wrapper:hover .picker-icon,
-.picker-input-wrapper.has-value .picker-icon {
+.picker-input-wrapper:hover .picker-inline-icon,
+.picker-input-wrapper.has-value .picker-inline-icon {
   color: var(--accent, #3b82f6);
 }
 
 .picker-input-wrapper .input.picker-input {
+  flex: 1;
   width: 100%;
-  padding-left: 38px;
-  padding-right: 32px;
+  padding-left: 0;
+  padding-right: 30px;
   border: none;
   background: transparent;
   box-shadow: none;

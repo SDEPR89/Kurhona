@@ -1,6 +1,6 @@
 // Kurhona Service Worker — handles Web Push notifications and PWA offline caching.
 
-const CACHE_NAME = "kurhona-shell-v1";
+const CACHE_NAME = "kurhona-shell-v2";
 const STATIC_ASSETS = [
   "/",
   "/index.html",

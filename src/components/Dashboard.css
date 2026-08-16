@@ -2930,92 +2930,218 @@ button.task-status-dot.status-dot--submitted::before {
   }
 }
 
-/* Modern Date & Time Picker Container UX/UI */
-.field-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.field-badge {
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: var(--accent-transparent, rgba(59, 130, 246, 0.15));
-  color: var(--accent, #3b82f6);
-  border: 1px solid var(--accent-border, rgba(59, 130, 246, 0.25));
-}
-
-.picker-input-wrapper {
+/* Custom Floating Popover Picker UI */
+.relative-field {
   position: relative;
+}
+
+.custom-picker-trigger {
+  width: 100%;
   display: flex;
   align-items: center;
-  width: 100%;
+  gap: 10px;
+  padding: 11px 12px;
   border: 1px solid var(--input-border, rgba(255, 255, 255, 0.15));
   border-radius: 10px;
   background: var(--input-bg, rgba(255, 255, 255, 0.04));
-  transition: all 0.2s ease;
-  cursor: pointer;
-}
-
-.picker-input-wrapper:hover {
-  border-color: var(--fg-soft, rgba(255, 255, 255, 0.3));
-  background: var(--input-hover-bg, rgba(255, 255, 255, 0.07));
-}
-
-.picker-input-wrapper:focus-within {
-  border-color: var(--accent, #3b82f6);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-  background: var(--input-focus-bg, rgba(255, 255, 255, 0.08));
-}
-
-.picker-icon {
-  position: absolute;
-  left: 12px;
   color: var(--fg-muted, #94a3b8);
-  pointer-events: none;
-  transition: color 0.2s ease;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
 }
 
-.picker-input-wrapper:hover .picker-icon,
-.picker-input-wrapper.has-value .picker-icon {
+.custom-picker-trigger:hover {
+  border-color: var(--fg-soft, rgba(255, 255, 255, 0.3));
+  background: var(--input-hover-bg, rgba(255, 255, 255, 0.08));
+  color: var(--fg, #f8fafc);
+}
+
+.custom-picker-trigger.has-value {
+  border-color: var(--accent-border, rgba(59, 130, 246, 0.4));
+  color: var(--fg, #f8fafc);
+  font-weight: 600;
+}
+
+.picker-trigger-icon {
+  color: var(--fg-muted, #94a3b8);
+  flex-shrink: 0;
+}
+
+.custom-picker-trigger:hover .picker-trigger-icon,
+.custom-picker-trigger.has-value .picker-trigger-icon {
   color: var(--accent, #3b82f6);
 }
 
-.picker-input-wrapper .input.picker-input {
-  width: 100%;
-  padding-left: 36px;
-  padding-right: 32px;
-  border: none;
-  background: transparent;
-  box-shadow: none;
-  cursor: pointer;
-  font-weight: 500;
+.picker-trigger-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.picker-clear-btn {
-  position: absolute;
-  right: 8px;
-  width: 22px;
-  height: 22px;
-  display: flex;
+.picker-trigger-clear {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: none;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.1);
   color: var(--fg-muted, #94a3b8);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.picker-trigger-clear:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #f87171;
+}
+
+/* Floating Popover Card */
+.custom-popover-picker {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 120;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+  background: var(--card-bg, #0f172a);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  animation: popover-appear 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes popover-appear {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.popover-section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted, #94a3b8);
+  margin-bottom: 8px;
+}
+
+.popover-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.popover-grid--col2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.popover-option-btn {
+  padding: 7px 10px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  background: var(--input-bg, rgba(255, 255, 255, 0.04));
+  color: var(--fg, #f8fafc);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.popover-option-btn:hover {
+  background: var(--input-hover-bg, rgba(255, 255, 255, 0.12));
+  border-color: var(--fg-soft, rgba(255, 255, 255, 0.25));
+}
+
+.popover-option-btn.is-active {
+  background: var(--accent, #3b82f6);
+  color: #ffffff;
+  border-color: var(--accent, #3b82f6);
+  font-weight: 600;
+}
+
+.popover-option-btn--urgent {
+  grid-column: span 2;
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.35);
+  font-weight: 600;
+}
+
+.popover-option-btn--urgent:hover {
+  background: rgba(239, 68, 68, 0.28);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
+.popover-divider {
+  height: 1px;
+  background: var(--border-subtle, rgba(255, 255, 255, 0.1));
+  margin: 10px 0;
+}
+
+.popover-custom-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.popover-sublabel {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--fg-soft, #cbd5e1);
+}
+
+.popover-date-input,
+.popover-time-input {
+  width: auto;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+
+.popover-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.popover-action-btn {
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
-.picker-clear-btn:hover {
-  background: rgba(239, 68, 68, 0.2);
+.popover-action-btn--clear {
+  background: rgba(239, 68, 68, 0.12);
   color: #ef4444;
+  margin-right: auto;
 }
+
+.popover-action-btn--clear:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #f87171;
+}
+
+.popover-action-btn--done {
+  background: var(--accent, #3b82f6);
+  color: #ffffff;
+}
+
+.popover-action-btn--done:hover {
+  opacity: 0.9;
+}
+
 
 
